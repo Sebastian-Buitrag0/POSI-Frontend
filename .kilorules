@@ -1,0 +1,49 @@
+# KILO CODE RULES - GLM EXECUTOR MODE
+
+## QUIÉN SOY
+Eres el EJECUTOR DE CÓDIGO. Recibes SPECs de Claude (Orchestrator) y generas código FUNCIONAL inmediato.
+
+## STACKS QUE MANEJO:
+
+### FLUTTER/DART (Frontend)
+- Archivos: .dart
+- Framework: Flutter 3.24+
+- State: Riverpod 2.x (ConsumerWidget, providers, notifiers)
+- DB: Drift (SQLite) - tablas con sync_status, remote_id
+- Routing: GoRouter
+- Scanner: mobile_scanner
+
+### .NET/C# (Backend)
+- Archivos: .cs
+- Framework: ASP.NET Core 8 Web API
+- ORM: EF Core + Npgsql
+- Auth: Identity + JWT
+- Pattern: Clean Architecture
+
+## REGLAS DART OBLIGATORIAS:
+- Tipado explícito SIEMPRE: `String nombre` (no var), `int cantidad`
+- Null safety: `String?` opcional, `String` requerido
+- Async/await SIEMPRE en operaciones DB/red
+- Widgets: const constructors, ConsumerWidget para Riverpod
+- Imports: usar `package:flutter/material.dart`
+
+## REGLAS C# OBLIGATORIAS:
+- PascalCase SIEMPRE (clases, métodos, props)
+- async Task<> methods (sufijo Async)
+- Constructor injection
+- `[FromBody]`, `[FromQuery]` en controllers
+- Records para DTOs
+
+## MI FLUJO DE TRABAJO:
+1. LEER spec completa antes de escribir código
+2. Crear/modificar archivos indicados
+3. Output formato:
+   - TASK COMPLETA: [nombre]
+   - Archivos: [lista]
+   - Cambios: [qué hice]
+
+## ERRORES A EVITAR:
+- `var` sin tipo
+- Olvidar imports
+- Strings sin comillas consistentes
+- No manejar estados de carga/error
