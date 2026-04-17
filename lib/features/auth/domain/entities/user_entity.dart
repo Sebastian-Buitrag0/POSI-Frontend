@@ -49,4 +49,14 @@ class UserEntity {
         tenantId: json['tenantId'] as String,
         createdAt: DateTime.parse(json['createdAt'] as String),
       );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'email': email,
+        'firstName': firstName,
+        'lastName': lastName,
+        'role': role,
+        'tenantId': tenantId,
+        'createdAt': createdAt.toIso8601String(),
+      };
 }

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/api_constants.dart';
@@ -62,9 +64,22 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
     try {
       final response = await _api.get(ApiConstants.profile);
-      state = AuthAuthenticated(
-        UserEntity.fromJson(response.data as Map<String, dynamic>),
-      );
+      final user = UserEntity.fromJson(response.data as Map<String, dynamic>);
+      // Actualizar caché con datos frescos
+      await _api.saveUserJson(jsonEncode(user.toJson()));
+      state = AuthAuthenticated(user);
+    } on DioException catch (e) {
+      // Sin conexión → usar usuario cacheado si existe
+      if (_isOfflineError(e)) {
+        final cached = await _api.getCachedUserJson();
+        if (cached != null) {
+          state = AuthAuthenticated(
+            UserEntity.fromJson(jsonDecode(cached) as Map<String, dynamic>),
+          );
+          return;
+        }
+      }
+      state = const AuthUnauthenticated();
     } catch (_) {
       state = const AuthUnauthenticated();
     }
@@ -82,10 +97,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
         accessToken: auth.accessToken,
         refreshToken: auth.refreshToken,
       );
+      // Guardar usuario en caché para acceso offline
+      await _api.saveUserJson(jsonEncode(auth.user.toJson()));
       state = AuthAuthenticated(auth.user);
     } on DioException catch (e) {
       if (e.response?.statusCode == 403) {
         state = const AuthError('email_not_verified');
+      } else if (_isOfflineError(e)) {
+        state = const AuthError('Sin conexión. Conéctate para iniciar sesión por primera vez.');
       } else {
         state = AuthError(_parseError(e));
       }
@@ -120,6 +139,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _api.post(ApiConstants.logout);
     } catch (_) {}
     await _api.clearTokens();
+    await _api.clearCachedUser();
     state = const AuthUnauthenticated();
   }
 
@@ -141,6 +161,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = AuthError(_parseError(e));
     }
   }
+
+  bool _isOfflineError(DioException e) =>
+      e.type == DioExceptionType.connectionTimeout ||
+      e.type == DioExceptionType.receiveTimeout ||
+      e.type == DioExceptionType.connectionError ||
+      e.error.toString().contains('SocketException') ||
+      e.error.toString().contains('NetworkException');
 
   String _parseError(Exception e) {
     if (e.toString().contains('401')) return 'Email o contraseña incorrectos';

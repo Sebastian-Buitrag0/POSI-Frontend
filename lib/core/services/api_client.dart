@@ -5,6 +5,7 @@ import '../constants/api_constants.dart';
 
 const _kAccessToken = 'access_token';
 const _kRefreshToken = 'refresh_token';
+const _kCachedUser = 'cached_user';
 
 final apiClientProvider = Provider<ApiClient>((ref) => ApiClient());
 
@@ -40,6 +41,15 @@ class ApiClient {
     await _storage.delete(key: _kAccessToken);
     await _storage.delete(key: _kRefreshToken);
   }
+
+  // ── Cached user (offline support) ─────────────────────────────────────────
+
+  Future<void> saveUserJson(String json) =>
+      _storage.write(key: _kCachedUser, value: json);
+
+  Future<String?> getCachedUserJson() => _storage.read(key: _kCachedUser);
+
+  Future<void> clearCachedUser() => _storage.delete(key: _kCachedUser);
 
   // ── Interceptor ────────────────────────────────────────────────────────────
 
