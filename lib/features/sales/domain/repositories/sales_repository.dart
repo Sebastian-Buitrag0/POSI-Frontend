@@ -12,7 +12,10 @@ abstract class SalesRepository {
   Stream<List<Sale>> watchAll(String tenantId);
 
   Future<List<Sale>> getByDateRange(
-      String tenantId, DateTime from, DateTime to);
+      String tenantId, DateTime from, DateTime to,
+      {int limit = 50, int offset = 0});
 
   Future<List<Sale>> getTodaySales(String tenantId);
+
+  Future<void> voidSale(Sale sale);
 }

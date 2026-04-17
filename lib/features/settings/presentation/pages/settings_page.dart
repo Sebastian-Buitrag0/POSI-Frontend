@@ -1,13 +1,102 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/constants/api_constants.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/providers/sync_provider.dart';
+import '../../../../core/services/api_client.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+
+// ignore_for_file: use_build_context_synchronously
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
+
+  Future<void> _showChangePasswordDialog(
+      BuildContext context, WidgetRef ref) async {
+    final currentCtrl = TextEditingController();
+    final newCtrl = TextEditingController();
+    final confirmCtrl = TextEditingController();
+    String? errorText;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('Cambiar contraseña'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: currentCtrl,
+                obscureText: true,
+                decoration:
+                    const InputDecoration(labelText: 'Contraseña actual'),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: newCtrl,
+                obscureText: true,
+                decoration:
+                    const InputDecoration(labelText: 'Nueva contraseña'),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: confirmCtrl,
+                obscureText: true,
+                decoration:
+                    const InputDecoration(labelText: 'Confirmar contraseña'),
+              ),
+              if (errorText != null) ...[
+                const SizedBox(height: 8),
+                Text(errorText!,
+                    style: const TextStyle(color: Colors.red, fontSize: 13)),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                if (newCtrl.text != confirmCtrl.text) {
+                  setState(() => errorText = 'Las contraseñas no coinciden.');
+                  return;
+                }
+                if (newCtrl.text.length < 6) {
+                  setState(
+                      () => errorText = 'Mínimo 6 caracteres.');
+                  return;
+                }
+                try {
+                  final api = ref.read(apiClientProvider);
+                  await api.post(ApiConstants.changePassword, data: {
+                    'currentPassword': currentCtrl.text,
+                    'newPassword': newCtrl.text,
+                  });
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('Contraseña actualizada')),
+                  );
+                } catch (e) {
+                  setState(() => errorText =
+                      'Contraseña actual incorrecta o error del servidor.');
+                }
+              },
+              child: const Text('Guardar'),
+            ),
+          ],
+        ),
+      ),
+    );
+    currentCtrl.dispose();
+    newCtrl.dispose();
+    confirmCtrl.dispose();
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -125,6 +214,13 @@ class SettingsPage extends ConsumerWidget {
               onTap: () => context.push(AppRoutes.userManagement),
             ),
           ],
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.lock_outline, color: AppColors.primary),
+            title: const Text('Cambiar contraseña'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _showChangePasswordDialog(context, ref),
+          ),
           const Divider(),
           ListTile(
             leading: const Icon(Icons.logout, color: AppColors.error),

@@ -4,7 +4,7 @@ enum PaymentMethod {
   transfer
 }
 
-enum SaleStatus { completed, cancelled, refunded }
+enum SaleStatus { completed, cancelled, refunded, voided }
 
 class SaleItem {
   const SaleItem({
@@ -57,10 +57,12 @@ class Sale {
     required this.tenantId,
     required this.createdAt,
     this.notes,
+    this.remoteId,
   });
 
   final int id;
   final String saleNumber;
+  final String? remoteId;
   final List<SaleItem> items;
   final double subtotal;
   final double tax;
@@ -83,6 +85,7 @@ class Sale {
     String? tenantId,
     String? notes,
     DateTime? createdAt,
+    String? remoteId,
   }) => Sale(
     id: id ?? this.id,
     saleNumber: saleNumber ?? this.saleNumber,
@@ -95,5 +98,6 @@ class Sale {
     tenantId: tenantId ?? this.tenantId,
     notes: notes ?? this.notes,
     createdAt: createdAt ?? this.createdAt,
+    remoteId: remoteId ?? this.remoteId,
   );
 }

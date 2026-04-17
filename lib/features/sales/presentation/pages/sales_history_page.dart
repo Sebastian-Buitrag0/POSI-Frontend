@@ -6,6 +6,8 @@ import '../../domain/entities/sale.dart';
 import '../../domain/entities/sales_summary.dart';
 import '../providers/sales_history_provider.dart';
 
+// ignore_for_file: use_build_context_synchronously
+
 class SalesHistoryPage extends ConsumerWidget {
   const SalesHistoryPage({super.key});
 
@@ -45,15 +47,57 @@ class SalesHistoryPage extends ConsumerWidget {
                             onRefresh: notifier.refresh,
                             child: ListView.builder(
                               padding: const EdgeInsets.all(8),
-                              itemCount: state.sales.length,
-                              itemBuilder: (_, i) =>
-                                  _SaleCard(sale: state.sales[i]),
+                              itemCount: state.sales.length +
+                                  (state.hasMore ? 1 : 0),
+                              itemBuilder: (_, i) {
+                                if (i == state.sales.length) {
+                                  return _LoadMoreButton(
+                                    isLoading: state.isLoadingMore,
+                                    onPressed: notifier.loadMore,
+                                  );
+                                }
+                                return _SaleCard(
+                                  sale: state.sales[i],
+                                  onVoid: state.sales[i].status ==
+                                          SaleStatus.completed
+                                      ? () => _confirmVoid(
+                                          context, ref, state.sales[i])
+                                      : null,
+                                );
+                              },
                             ),
                           ),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _confirmVoid(
+      BuildContext context, WidgetRef ref, Sale sale) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Anular venta'),
+        content: Text(
+            '¿Anular ${sale.saleNumber}? Esta acción restaurará el stock de los productos.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Anular'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await ref.read(salesHistoryProvider.notifier).voidSale(sale);
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Venta anulada')));
+    }
   }
 
   Future<void> _showDateRangePicker(
@@ -165,10 +209,34 @@ class _Metric extends StatelessWidget {
   }
 }
 
+class _LoadMoreButton extends StatelessWidget {
+  const _LoadMoreButton({required this.isLoading, required this.onPressed});
+
+  final bool isLoading;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Center(
+        child: isLoading
+            ? const CircularProgressIndicator()
+            : OutlinedButton.icon(
+                onPressed: onPressed,
+                icon: const Icon(Icons.expand_more),
+                label: const Text('Cargar más'),
+              ),
+      ),
+    );
+  }
+}
+
 class _SaleCard extends StatelessWidget {
-  const _SaleCard({required this.sale});
+  const _SaleCard({required this.sale, this.onVoid});
 
   final Sale sale;
+  final VoidCallback? onVoid;
 
   @override
   Widget build(BuildContext context) {
@@ -181,17 +249,48 @@ class _SaleCard extends StatelessWidget {
       PaymentMethod.transfer => Icons.phone_android,
     };
 
+    final isVoided = sale.status == SaleStatus.voided ||
+        sale.status == SaleStatus.cancelled;
+
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
       child: ExpansionTile(
         leading: CircleAvatar(
-          backgroundColor: theme.colorScheme.primaryContainer,
+          backgroundColor: isVoided
+              ? Colors.grey[200]
+              : theme.colorScheme.primaryContainer,
           child: Icon(payIcon,
-              size: 18, color: theme.colorScheme.primary),
+              size: 18,
+              color: isVoided ? Colors.grey : theme.colorScheme.primary),
         ),
-        title: Text(
-          sale.saleNumber,
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+        title: Row(
+          children: [
+            Text(
+              sale.saleNumber,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+                color: isVoided ? Colors.grey : null,
+                decoration: isVoided ? TextDecoration.lineThrough : null,
+              ),
+            ),
+            if (isVoided) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.red[100],
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text('ANULADA',
+                    style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.red[700],
+                        fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ],
         ),
         subtitle:
             Text('$dateStr  $timeStr · ${sale.items.length} ítem(s)'),
@@ -199,7 +298,8 @@ class _SaleCard extends StatelessWidget {
           CurrencyFormatter.formatWithSymbol(sale.total),
           style: theme.textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.bold,
-            color: theme.colorScheme.primary,
+            color: isVoided ? Colors.grey : theme.colorScheme.primary,
+            decoration: isVoided ? TextDecoration.lineThrough : null,
           ),
         ),
         children: [
@@ -244,6 +344,19 @@ class _SaleCard extends StatelessWidget {
                         style: theme.textTheme.bodySmall),
                   ],
                 ),
+                if (onVoid != null) ...[
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: onVoid,
+                      icon:
+                          const Icon(Icons.cancel_outlined, color: Colors.red),
+                      label: const Text('Anular venta',
+                          style: TextStyle(color: Colors.red)),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

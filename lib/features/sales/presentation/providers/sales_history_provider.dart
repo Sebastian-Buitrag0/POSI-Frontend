@@ -4,6 +4,8 @@ import '../../data/repositories/sales_repository_provider.dart';
 import '../../domain/entities/sale.dart';
 import '../../domain/entities/sales_summary.dart';
 
+const _kPageSize = 30;
+
 enum DateRangeFilter { today, week, month, custom }
 
 class SalesHistoryState {
@@ -14,6 +16,8 @@ class SalesHistoryState {
     this.customFrom,
     this.customTo,
     this.isLoading = false,
+    this.isLoadingMore = false,
+    this.hasMore = false,
     this.error,
   });
 
@@ -23,6 +27,8 @@ class SalesHistoryState {
   final DateTime? customFrom;
   final DateTime? customTo;
   final bool isLoading;
+  final bool isLoadingMore;
+  final bool hasMore;
   final String? error;
 
   SalesHistoryState copyWith({
@@ -32,6 +38,8 @@ class SalesHistoryState {
     DateTime? customFrom,
     DateTime? customTo,
     bool? isLoading,
+    bool? isLoadingMore,
+    bool? hasMore,
     String? error,
   }) =>
       SalesHistoryState(
@@ -41,6 +49,8 @@ class SalesHistoryState {
         customFrom: customFrom ?? this.customFrom,
         customTo: customTo ?? this.customTo,
         isLoading: isLoading ?? this.isLoading,
+        isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+        hasMore: hasMore ?? this.hasMore,
         error: error ?? this.error,
       );
 }
@@ -65,14 +75,54 @@ class SalesHistoryNotifier extends StateNotifier<SalesHistoryState> {
     try {
       final repo = _ref.read(salesRepositoryProvider);
       final (from, to) = _dateRange();
-      final sales = await repo.getByDateRange(auth.user.tenantId, from, to);
+      final sales = await repo.getByDateRange(auth.user.tenantId, from, to,
+          limit: _kPageSize, offset: 0);
       state = state.copyWith(
         sales: sales,
         summary: SalesSummary.fromSales(sales),
         isLoading: false,
+        hasMore: sales.length == _kPageSize,
       );
     } on Exception catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
+    }
+  }
+
+  Future<void> loadMore() async {
+    if (!state.hasMore || state.isLoadingMore) return;
+    final auth = _ref.read(authProvider);
+    if (auth is! AuthAuthenticated) return;
+
+    state = state.copyWith(isLoadingMore: true);
+    try {
+      final repo = _ref.read(salesRepositoryProvider);
+      final (from, to) = _dateRange();
+      final more = await repo.getByDateRange(auth.user.tenantId, from, to,
+          limit: _kPageSize, offset: state.sales.length);
+      state = state.copyWith(
+        sales: [...state.sales, ...more],
+        isLoadingMore: false,
+        hasMore: more.length == _kPageSize,
+      );
+    } on Exception catch (e) {
+      state = state.copyWith(isLoadingMore: false, error: e.toString());
+    }
+  }
+
+  Future<void> voidSale(Sale sale) async {
+    try {
+      final repo = _ref.read(salesRepositoryProvider);
+      await repo.voidSale(sale);
+      // Update local list optimistically
+      final updated = state.sales
+          .map((s) => s.id == sale.id ? s.copyWith(status: SaleStatus.voided) : s)
+          .toList();
+      state = state.copyWith(
+        sales: updated,
+        summary: SalesSummary.fromSales(updated),
+      );
+    } on Exception catch (e) {
+      state = state.copyWith(error: e.toString());
     }
   }
 

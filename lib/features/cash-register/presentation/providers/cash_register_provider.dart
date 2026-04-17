@@ -1,5 +1,8 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../../../../core/constants/api_constants.dart';
+import '../../../../core/services/api_client.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../sales/data/repositories/sales_repository_provider.dart';
 import '../../../sales/domain/entities/sale.dart';
@@ -92,10 +95,31 @@ class CashRegisterNotifier extends StateNotifier<CashRegisterState> {
       sales: [],
       summary: SalesSummary.empty,
     );
+
+    // Sync to backend (best effort)
+    try {
+      final api = _ref.read(apiClientProvider);
+      await api.post(ApiConstants.cashRegisterOpen,
+          data: {'openingCash': initialCash, 'notes': null});
+    } on DioException {
+      // Offline: local state is already saved
+    }
+
     await _loadSales();
   }
 
-  Future<void> closeRegister() async {
+  Future<void> closeRegister({double? actualCash}) async {
+    // Sync to backend (best effort)
+    try {
+      final api = _ref.read(apiClientProvider);
+      await api.post(ApiConstants.cashRegisterClose, data: {
+        'actualCash': actualCash ?? state.expectedCash,
+        'notes': null,
+      });
+    } on DioException {
+      // Offline
+    }
+
     await _storage.delete(key: _keyStatus);
     await _storage.delete(key: _keyOpeningCash);
     await _storage.delete(key: _keyOpenedAt);

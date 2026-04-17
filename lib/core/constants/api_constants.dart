@@ -24,6 +24,17 @@ class ApiConstants {
   // Stats
   static const String stats = '/api/stats';
 
+  // Sales
+  static const String sales = '/api/sales';
+
+  // Cash register
+  static const String cashRegisterCurrent = '/api/cash-register/current';
+  static const String cashRegisterOpen = '/api/cash-register/open';
+  static const String cashRegisterClose = '/api/cash-register/close';
+
+  // Change password
+  static const String changePassword = '/api/auth/change-password';
+
   // Users
   static const String users = '/api/users';
   static const String usersInvite = '/api/users/invite';

@@ -29,6 +29,7 @@ extension SaleMapper on SalesTableData {
     tenantId: tenantId,
     notes: notes,
     createdAt: createdAt,
+    remoteId: remoteId,
   );
 
   static PaymentMethod _parsePaymentMethod(String s) {
@@ -43,6 +44,7 @@ extension SaleMapper on SalesTableData {
     return switch (s) {
       'cancelled' => SaleStatus.cancelled,
       'refunded' => SaleStatus.refunded,
+      'voided' => SaleStatus.voided,
       _ => SaleStatus.completed,
     };
   }

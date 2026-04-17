@@ -1,6 +1,9 @@
+import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/database/sync_mixin.dart';
+import '../../../../core/services/api_client.dart';
+import '../../../../core/constants/api_constants.dart';
 import '../../domain/entities/sale.dart';
 import '../../domain/entities/cart_item.dart';
 import '../../domain/mappers/sale_mapper.dart';
@@ -13,11 +16,13 @@ class LocalSalesRepository implements SalesRepository {
     required this.db,
     required this.salesDao,
     required this.productsDao,
+    required this.apiClient,
   });
 
   final AppDatabase db;
   final SalesDao salesDao;
   final ProductsDao productsDao;
+  final ApiClient apiClient;
 
   @override
   Future<Sale> completeSale({
@@ -76,14 +81,30 @@ class LocalSalesRepository implements SalesRepository {
 
   @override
   Future<List<Sale>> getByDateRange(
-      String tenantId, DateTime from, DateTime to) async {
-    final rows = await salesDao.getByDateRange(tenantId, from, to);
+      String tenantId, DateTime from, DateTime to,
+      {int limit = 50, int offset = 0}) async {
+    final rows = await salesDao.getByDateRange(tenantId, from, to,
+        limit: limit, offset: offset);
     final sales = <Sale>[];
     for (final row in rows) {
       final itemRows = await salesDao.getItemsBySaleId(row.id);
       sales.add(row.toDomain(itemRows.map((r) => r.toDomain()).toList()));
     }
     return sales;
+  }
+
+  @override
+  Future<void> voidSale(Sale sale) async {
+    // Mark locally as voided
+    await salesDao.updateStatus(sale.id, 'voided');
+    // Call remote API if we have a remoteId
+    if (sale.remoteId != null) {
+      try {
+        await apiClient.post('${ApiConstants.sales}/${sale.remoteId}/void');
+      } on DioException {
+        // Best-effort — local status is already updated
+      }
+    }
   }
 
   @override

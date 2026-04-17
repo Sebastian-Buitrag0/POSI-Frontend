@@ -32,13 +32,15 @@ class SalesDao extends DatabaseAccessor<AppDatabase>
           .get();
 
   Future<List<SalesTableData>> getByDateRange(
-          String tenantId, DateTime from, DateTime to) =>
+          String tenantId, DateTime from, DateTime to,
+          {int limit = 50, int offset = 0}) =>
       (select(salesTable)
             ..where((t) =>
                 t.tenantId.equals(tenantId) &
                 t.createdAt.isBiggerOrEqualValue(from) &
                 t.createdAt.isSmallerOrEqualValue(to))
-            ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+            ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+            ..limit(limit, offset: offset))
           .get();
 
   Stream<List<SalesTableData>> watchByDateRange(
@@ -64,5 +66,10 @@ class SalesDao extends DatabaseAccessor<AppDatabase>
           remoteId: Value(remoteId),
           syncStatus: Value(SyncStatus.synced),
         ),
+      );
+
+  Future<void> updateStatus(int localId, String status) =>
+      (update(salesTable)..where((t) => t.id.equals(localId))).write(
+        SalesTableCompanion(status: Value(status)),
       );
 }
