@@ -14,5 +14,7 @@ class AppRoutes {
   static const String scanner = '/scanner';
   static const String emailVerification = '/verify-email';
   static const String forgotPassword = '/forgot-password';
+  static const String stats = '/stats';
   static const String userManagement = '/users';
+  static const String scannerPicker = '/scanner-picker';
 }

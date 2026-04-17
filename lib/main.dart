@@ -18,7 +18,9 @@ import 'features/sales/presentation/pages/pos_page.dart';
 import 'features/sales/presentation/pages/sales_history_page.dart';
 import 'features/cash-register/presentation/pages/cash_register_page.dart';
 import 'features/settings/presentation/pages/settings_page.dart';
+import 'features/scanner/presentation/pages/scanner_picker_screen.dart';
 import 'features/users/presentation/pages/user_management_page.dart';
+import 'features/stats/presentation/pages/stats_page.dart';
 
 void main() {
   runApp(const ProviderScope(child: POSIApp()));
@@ -35,12 +37,16 @@ class POSIApp extends ConsumerWidget {
     final router = GoRouter(
       initialLocation: AppRoutes.splash,
       redirect: (context, state) {
+        final isLoading = authState is AuthInitial || authState is AuthLoading;
         final isAuthenticated = authState is AuthAuthenticated;
         final isAuthRoute = state.matchedLocation == AppRoutes.login ||
             state.matchedLocation == AppRoutes.register ||
             state.matchedLocation == AppRoutes.emailVerification ||
             state.matchedLocation == AppRoutes.forgotPassword;
         final isSplash = state.matchedLocation == AppRoutes.splash;
+
+        // Mientras verifica el token guardado, quedarse en splash
+        if (isLoading) return isSplash ? null : AppRoutes.splash;
 
         if (isSplash) {
           return isAuthenticated ? AppRoutes.home : AppRoutes.login;
@@ -115,6 +121,18 @@ class POSIApp extends ConsumerWidget {
           path: AppRoutes.userManagement,
           builder: (_, _) => const UserManagementPage(),
         ),
+        GoRoute(
+          path: AppRoutes.stats,
+          builder: (_, _) => const StatsPage(),
+        ),
+        GoRoute(
+          path: AppRoutes.scannerPicker,
+          builder: (_, state) {
+            final resolver =
+                state.extra as Future<String?> Function(String)?;
+            return ScannerPickerScreen(nameResolver: resolver);
+          },
+        ),
       ],
       errorBuilder: (context, state) => const _ErrorPage(),
     );
@@ -138,6 +156,23 @@ class _SplashScreen extends StatelessWidget {
       );
 }
 
+String _formatSyncTime(DateTime dt) {
+  final now = DateTime.now();
+  final diff = now.difference(dt);
+  if (diff.inSeconds < 60) return 'ahora';
+  if (diff.inMinutes < 60) return 'hace ${diff.inMinutes}m';
+  if (diff.inHours < 24) {
+    final h = dt.hour.toString().padLeft(2, '0');
+    final m = dt.minute.toString().padLeft(2, '0');
+    return '$h:$m';
+  }
+  final d = dt.day.toString().padLeft(2, '0');
+  final mo = dt.month.toString().padLeft(2, '0');
+  final h = dt.hour.toString().padLeft(2, '0');
+  final m = dt.minute.toString().padLeft(2, '0');
+  return '$d/$mo $h:$m';
+}
+
 class _HomePage extends ConsumerWidget {
   const _HomePage();
 
@@ -150,29 +185,43 @@ class _HomePage extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('POSI'),
         actions: [
-          if (sync.isSyncing)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12),
-              child: SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Icon(
-                sync.lastSyncAt != null ? Icons.cloud_done : Icons.cloud_off,
-                color: sync.lastSyncAt != null
-                    ? AppColors.success
-                    : AppColors.textSecondary,
-                size: 22,
-              ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (sync.isSyncing)
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  Icon(
+                    sync.lastSyncAt != null
+                        ? Icons.cloud_done
+                        : Icons.cloud_off,
+                    color: sync.lastSyncAt != null
+                        ? AppColors.success
+                        : AppColors.textSecondary,
+                    size: 20,
+                  ),
+                if (sync.lastSyncAt != null) ...[
+                  const SizedBox(width: 4),
+                  Text(
+                    _formatSyncTime(sync.lastSyncAt!),
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ],
             ),
+          ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
-            onPressed: () => context.go(AppRoutes.settings),
+            onPressed: () => context.push(AppRoutes.settings),
           ),
         ],
       ),
@@ -206,26 +255,40 @@ class _HomePage extends ConsumerWidget {
                     icon: Icons.point_of_sale,
                     label: 'Punto de Venta',
                     color: AppColors.primary,
-                    onTap: () => context.go(AppRoutes.pos),
+                    onTap: () => context.push(AppRoutes.pos),
                   ),
                   _MenuCard(
                     icon: Icons.inventory_2_outlined,
                     label: 'Productos',
                     color: AppColors.secondary,
-                    onTap: () => context.go(AppRoutes.products),
+                    onTap: () => context.push(AppRoutes.products),
                   ),
                   _MenuCard(
                     icon: Icons.receipt_long_outlined,
                     label: 'Historial',
                     color: AppColors.accent,
-                    onTap: () => context.go(AppRoutes.salesHistory),
+                    onTap: () => context.push(AppRoutes.salesHistory),
                   ),
                   _MenuCard(
                     icon: Icons.store_outlined,
                     label: 'Caja',
                     color: AppColors.info,
-                    onTap: () => context.go(AppRoutes.cashRegister),
+                    onTap: () => context.push(AppRoutes.cashRegister),
                   ),
+                  if (user?.isAdmin == true) ...[
+                    _MenuCard(
+                      icon: Icons.bar_chart_rounded,
+                      label: 'Estadísticas',
+                      color: Colors.deepPurple,
+                      onTap: () => context.push(AppRoutes.stats),
+                    ),
+                    _MenuCard(
+                      icon: Icons.group_outlined,
+                      label: 'Equipo',
+                      color: AppColors.secondary,
+                      onTap: () => context.push(AppRoutes.userManagement),
+                    ),
+                  ],
                 ],
               ),
             ),

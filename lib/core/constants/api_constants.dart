@@ -21,6 +21,9 @@ class ApiConstants {
   // Products
   static const String products = '/api/products';
 
+  // Stats
+  static const String stats = '/api/stats';
+
   // Users
   static const String users = '/api/users';
   static const String usersInvite = '/api/users/invite';

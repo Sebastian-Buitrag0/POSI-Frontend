@@ -25,7 +25,8 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
 
   @override
   void dispose() {
-    ref.read(scannerProvider.notifier).stopScanning();
+    // autoDispose limpia el provider automáticamente
+    // no llamar stopScanning() aquí para evitar crash al navegar
     super.dispose();
   }
 
@@ -98,7 +99,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
           title: 'Producto encontrado',
           subtitle: barcode,
           primaryLabel: 'Ver producto',
-          onPrimary: () => context.go(
+          onPrimary: () => context.push(
             AppRoutes.productDetail.replaceAll(':id', '$productId'),
           ),
           secondaryLabel: 'Escanear otro',
@@ -111,7 +112,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
           title: 'Código no encontrado',
           subtitle: barcode,
           primaryLabel: 'Crear producto',
-          onPrimary: () => context.go(
+          onPrimary: () => context.push(
             '${AppRoutes.productDetail.replaceAll(':id', 'new')}?barcode=${Uri.encodeComponent(barcode)}',
           ),
           secondaryLabel: 'Escanear otro',

@@ -33,7 +33,7 @@ class SettingsPage extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Configuración'),
-        leading: BackButton(onPressed: () => context.go('/home')),
+        leading: BackButton(onPressed: () => context.pop()),
       ),
       body: ListView(
         children: [

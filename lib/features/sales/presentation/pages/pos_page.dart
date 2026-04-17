@@ -5,11 +5,13 @@ import '../../../../core/constants/app_routes.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../shared/widgets/payment_method_selector.dart';
 import '../../../../shared/widgets/receipt_widget.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../products/data/repositories/product_repository_provider.dart';
+import '../../../products/presentation/providers/products_provider.dart';
 import '../../domain/entities/sale.dart';
 import '../providers/cart_provider.dart';
 import '../providers/checkout_provider.dart';
 import '../widgets/cart_item_widget.dart';
-import '../../../products/presentation/providers/products_provider.dart';
 
 class PosPage extends ConsumerStatefulWidget {
   const PosPage({super.key});
@@ -55,7 +57,12 @@ class _PosPageState extends ConsumerState<PosPage> {
           IconButton(
             icon: const Icon(Icons.qr_code_scanner),
             tooltip: 'Escanear',
-            onPressed: () => context.push(AppRoutes.scanner),
+            onPressed: () => _scanToCart(context),
+          ),
+          IconButton(
+            icon: const Icon(Icons.search),
+            tooltip: 'Buscar producto',
+            onPressed: () => _showProductPicker(context),
           ),
           if (!cart.isEmpty)
             IconButton(
@@ -69,7 +76,10 @@ class _PosPageState extends ConsumerState<PosPage> {
         children: [
           Expanded(
             child: cart.isEmpty
-                ? _EmptyCart(onAddProduct: () => _showProductPicker(context))
+                ? _EmptyCart(
+                    onScan: () => _scanToCart(context),
+                    onSearch: () => _showProductPicker(context),
+                  )
                 : ListView.builder(
                     padding: const EdgeInsets.only(top: 8, bottom: 8),
                     itemCount: cart.items.length,
@@ -79,17 +89,55 @@ class _PosPageState extends ConsumerState<PosPage> {
           _CheckoutPanel(cart: cart, isProcessing: isProcessing),
         ],
       ),
-      floatingActionButton: cart.isEmpty
-          ? FloatingActionButton.extended(
-              onPressed: () => _showProductPicker(context),
-              icon: const Icon(Icons.add),
-              label: const Text('Agregar producto'),
-            )
-          : FloatingActionButton(
-              onPressed: () => _showProductPicker(context),
-              child: const Icon(Icons.add),
-            ),
+      floatingActionButton: null,
     );
+  }
+
+  Future<void> _scanToCart(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final auth = ref.read(authProvider);
+    if (auth is! AuthAuthenticated) return;
+    final repo = ref.read(productRepositoryProvider);
+
+    Future<String?> nameResolver(String barcode) async {
+      final product = await repo.getByBarcode(barcode, auth.user.tenantId);
+      return product?.name;
+    }
+
+    final barcodes = await context.push<List<String>>(
+      AppRoutes.scannerPicker,
+      extra: nameResolver,
+    );
+    if (barcodes == null || barcodes.isEmpty || !mounted) return;
+
+    int added = 0;
+    final List<String> notFound = [];
+
+    for (final barcode in barcodes) {
+      final product = await repo.getByBarcode(barcode, auth.user.tenantId);
+      if (!mounted) return;
+      if (product == null) {
+        if (!notFound.contains(barcode)) notFound.add(barcode);
+      } else {
+        ref.read(cartProvider.notifier).addItem(product);
+        added++;
+      }
+    }
+
+    if (added > 0) {
+      messenger.showSnackBar(SnackBar(
+        content: Text(
+            '$added producto${added == 1 ? '' : 's'} agregado${added == 1 ? '' : 's'} al carrito'),
+        duration: const Duration(seconds: 2),
+      ));
+    }
+    for (final barcode in notFound) {
+      messenger.showSnackBar(SnackBar(
+        content: Text('Producto "$barcode" no encontrado'),
+        backgroundColor: Colors.orange,
+        duration: const Duration(seconds: 2),
+      ));
+    }
   }
 
   void _showProductPicker(BuildContext context) {
@@ -232,9 +280,10 @@ class _CheckoutPanel extends ConsumerWidget {
 }
 
 class _EmptyCart extends StatelessWidget {
-  const _EmptyCart({required this.onAddProduct});
+  const _EmptyCart({required this.onScan, required this.onSearch});
 
-  final VoidCallback onAddProduct;
+  final VoidCallback onScan;
+  final VoidCallback onSearch;
 
   @override
   Widget build(BuildContext context) {
@@ -245,16 +294,22 @@ class _EmptyCart extends StatelessWidget {
           Icon(Icons.shopping_cart_outlined,
               size: 64, color: Colors.grey[400]),
           const SizedBox(height: 16),
-          Text('Carrito vacio',
+          Text('Carrito vacío',
               style: Theme.of(context)
                   .textTheme
                   .titleMedium
                   ?.copyWith(color: Colors.grey)),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: onScan,
+            icon: const Icon(Icons.qr_code_scanner),
+            label: const Text('Escanear productos'),
+          ),
           const SizedBox(height: 8),
-          TextButton.icon(
-            onPressed: onAddProduct,
-            icon: const Icon(Icons.add),
-            label: const Text('Agregar producto'),
+          OutlinedButton.icon(
+            onPressed: onSearch,
+            icon: const Icon(Icons.search),
+            label: const Text('Buscar producto'),
           ),
         ],
       ),
@@ -276,7 +331,6 @@ class _ProductPickerSheetState extends ConsumerState<_ProductPickerSheet> {
   @override
   void dispose() {
     _searchController.dispose();
-    ref.read(productSearchQueryProvider.notifier).state = '';
     super.dispose();
   }
 
@@ -294,7 +348,8 @@ class _ProductPickerSheetState extends ConsumerState<_ProductPickerSheet> {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Container(
-              width: 40, height: 4,
+              width: 40,
+              height: 4,
               decoration: BoxDecoration(
                 color: Colors.grey[300],
                 borderRadius: BorderRadius.circular(2),
@@ -313,8 +368,7 @@ class _ProductPickerSheetState extends ConsumerState<_ProductPickerSheet> {
           ),
           Expanded(
             child: productsAsync.when(
-              loading: () =>
-                  const Center(child: CircularProgressIndicator()),
+              loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => Center(child: Text('Error: $e')),
               data: (products) => ListView.builder(
                 controller: scrollController,
@@ -327,7 +381,8 @@ class _ProductPickerSheetState extends ConsumerState<_ProductPickerSheet> {
                       .any((ci) => ci.productId == p.id);
                   return ListTile(
                     title: Text(p.name),
-                    subtitle: Text('${CurrencyFormatter.format(p.price)} — Stock: ${p.stock}'),
+                    subtitle: Text(
+                        '${CurrencyFormatter.format(p.price)} — Stock: ${p.stock}'),
                     trailing: p.stock > 0
                         ? IconButton(
                             icon: Icon(
