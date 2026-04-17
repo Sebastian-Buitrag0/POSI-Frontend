@@ -1,42 +1,60 @@
-RESTRICCIONES IMPORTANTES
-✅ SIEMPRE USA BASH TOOL DE CLAUDE PARA LLAMAR KILO
-❌ NO copies y pegues manualmente entre Claude y Kilo (eso es lento)
-🔄 EL FLUJO ES: Claude → Kilo (vía wrapper) → Claude (revisión) → siguiente task
-EOF
+# CLAUDE.md
 
-text
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Commands
 
----
+```bash
+# Install dependencies
+flutter pub get
 
-### **Paso 3: Probar la integración**
+# Run the app (debug)
+flutter run
 
-En Claude Code, pega:
+# Run on a specific device
+flutter run -d <device-id>          # list devices: flutter devices
 
-Testea la integración con Kilo.
+# Analyze (lint)
+flutter analyze
 
-Usa Bash tool para ejecutar:
-./kilowrapper.sh "Responde 'Kilo CLI funcionando desde Claude' --model glm-4.7"
+# Run all tests
+flutter test
 
-Luego revisa la salida.
+# Run a single test file
+flutter test test/widget_test.dart
+```
 
-text
+## Architecture
 
+**POSI** is a Flutter POS (Punto de Venta e Inventario) app targeting mobile. It follows an offline-first approach using Drift (SQLite) as local DB, syncing with the .NET backend over Dio.
 
-Deberías ver que Claude ejecuta el comando y te muestra la respuesta de GLM.
+**State management:** Riverpod — wrap the app root in `ProviderScope` (already done in `main.dart`). Prefer `ConsumerWidget` / `ConsumerStatefulWidget` over `StatelessWidget` when accessing providers.
 
----
+**Routing:** `go_router`. All route path constants live in `lib/core/constants/app_routes.dart`. Routes are currently declared inline in `POSIApp.build`; as the app grows they should be extracted to a dedicated router file.
 
-## 💬 **CUANDO ESTÉ TODO LISTO, DIME:**
+**Current screen flow:**
+`/` (Splash) → `/login` → `/home` (Dashboard) → `/products`, `/pos`, `/sales`, `/cash-register`, `/settings`
 
-A) "✅ Kilo CLI instalado y configurado"
-→ Te doy el primer flujo automatizado completo
+**lib layout:**
+```
+lib/
+  core/
+    constants/   # AppColors, AppRoutes
+    theme/       # AppTheme (Material 3, light + dark)
+    utils/       # CurrencyFormatter, etc.
+  main.dart      # Entry point — screens still inline here, pending extraction
+```
 
-B) "❌ Error al instalar/configurar Kilo"
-→ Pega el error aquí
+Features (Login, Products CRUD, POS/cart, Sales history, Cash register) are all pending implementation; screens currently show placeholder text.
 
-C) "✅ Todo listo, ¿qué hago primero?"
-→ Te doy: "Paso 3: Base de Datos Drift con Claude+Kilo automatizado"
+## Key packages
 
-D) "¿Puedes mostrarme un ejemplo visual del flujo?"
-→ Te dibujo un diagrama ASCII de cómo se ve la conversación
+| Package | Purpose |
+|---|---|
+| `flutter_riverpod` | State management |
+| `drift` + `sqlite3_flutter_libs` | Local offline-first database |
+| `go_router` | Declarative routing |
+| `dio` + `flutter_secure_storage` | HTTP client + secure token storage |
+| `mobile_scanner` | Barcode scanner |
+| `flutter_form_builder` + `form_builder_validators` | Forms & validation |
+| `connectivity_plus` | Online/offline detection |
