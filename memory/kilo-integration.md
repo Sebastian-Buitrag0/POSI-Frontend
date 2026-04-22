@@ -1,56 +1,86 @@
-# KILO CLI INTEGRATION - Instrucciones para Claude
+# INTEGRACIÓN DE AGENTES - Instrucciones para Claude
 
-## QUÉ ES KILO WRAPPER
+## AGENTES DISPONIBLES
 
-Es un script (`./kilowrapper.sh`) que te permite enviar tareas a GLM (vía Kilo CLI) desde Claude Code.
+| Agente | Script | Modelo | Cuándo usar |
+|---|---|---|---|
+| **GLM 5.1** | `./kilowrapper.sh` | zai/glm-5.1 | Tareas simples: CRUD, boilerplate, fixes pequeños |
+| **Kimi k2.6** | `./kimiwrapper.sh` | kimi-for-coding | Features complejas, contexto largo (262k tokens), arquitectura |
 
-## CÓMO USARLO EN CLAUDE
+## FLUJO DE TRABAJO
 
-Cuando quieras que GLM ejecute algo, usa el Bash tool de Claude:
-
-### Formato 1: Task simple (una línea):
 ```
-Bash("kilo run 'Crear tabla Products en Drift con campos: id, barcode, name, price, stock' --model glm-5.1")
-```
-
-### Formato 2: Con spec detallada:
-```
-Bash("
-  PREGUNTA: "Ejecuta la spec en specs/003-drift-database-setup.md"
-  ARGUMENTOS: { command: "./kilowrapper.sh 'Ejecuta todas las tasks de specs/003-drift-database-setup.md'" }
-")
+[Tú] → requisito en lenguaje natural
+  ↓
+[Claude Code] → analiza, genera spec detallada en specs/
+  ↓
+[Kimi/GLM] → implementa según spec
+  ↓
+[Claude Code] → revisa, corrige, integra
 ```
 
-### Formato 3: Revisar código generado por GLM:
+**Regla:** Ningún agente recibe instrucciones vagas. Todo lo que va a Kimi/GLM es una spec estructurada.
+
+## CÓMO LLAMAR CADA AGENTE
+
+### GLM — tareas simples
+```bash
+./kilowrapper.sh "Crea el widget ProductCard con campos: id, name, price, stock"
+./kilowrapper.sh "Ejecuta la spec" specs/005-products-crud.md
+./kilowrapper.sh "Tarea" specs/mi-spec.md --auto
 ```
-Bash("
-  PREGUNTA: "GLM generó código en lib/features/products/. Revisa los archivos y verifica:
-  - Tipado correcto Dart
-  - Sigue patrones Riverpod/Drift
-  - No errores obvios
-  Comando a ejecutar: find lib/features/products -name '*.dart' | head -10"
-)
+
+### Kimi k2.6 — features complejas
+```bash
+./kimiwrapper.sh "Implementa el sistema de sincronización offline-first completo"
+./kimiwrapper.sh "Ejecuta la spec" specs/011-sync-frontend.md
+./kimiwrapper.sh "Implementa con plan" specs/mi-spec.md --plan
 ```
 
-## EJEMPLOS DE FLUJO COMPLETO
+## CUÁNDO USAR CADA UNO
 
-### Ejemplo 1: Crear feature completa
+**GLM cuando:**
+- Tarea < 200 líneas, completamente especificada
+- Boilerplate repetitivo (DAOs, modelos, widgets simples)
+- Fix puntual con contexto claro
 
-Tú: "Claude, crea la base de datos Drift y haz que GLM la implemente"
+**Kimi k2.6 cuando:**
+- La feature toca múltiples archivos o capas
+- Necesita entender mucho contexto del proyecto
+- Requiere decisiones de arquitectura durante la implementación
+- La spec es larga o compleja
+
+## ESTRUCTURA DE SPEC (para ambos agentes)
+
+```markdown
+# [NNN] Nombre de la feature
+
+## Objetivo
+Una oración clara de qué debe hacer.
+
+## Archivos a crear/modificar
+- lib/features/X/...
+
+## Comportamiento esperado
+- Punto 1
+- Punto 2
+
+## Restricciones
+- Usar Riverpod para estado
+- Usar Drift para persistencia local
+- No romper tests existentes
+
+## Definición de hecho
+- [ ] flutter analyze sin errores
+- [ ] Feature funciona en modo offline
+```
+
+## FLUJO COMPLETO — Ejemplo
+
+Tú: "Implementa descuentos en el POS"
 
 Claude:
-1. Genera spec detallada en `specs/`
-2. Usa Bash tool: `./kilowrapper.sh 'Ejecuta specs/003...'`
-3. Espera respuesta de GLM
-4. Revisa con Bash: `find lib/ -name '*.dart' | head -20`
-5. Si hay errores → genera corrections spec y ejecuta de nuevo
-
-### Ejemplo 2: Debuggear
-
-Tú: "Hay errores en el código que generó GLM"
-
-Claude:
-1. Lee los archivos con Bash: `find lib -name '*.dart' -exec cat {} \;`
-2. Identifica errores
-3. Genera spec de correcciones
-4. Ejecuta: `./kilowrapper.sh 'Corrige estos errores: [pegar errores]'`
+1. Genera `specs/016-discounts-pos.md`
+2. Ejecuta: `./kimiwrapper.sh "Ejecuta la spec" specs/016-discounts-pos.md`
+3. Revisa con: `flutter analyze` + leer archivos modificados
+4. Si hay errores → genera spec de corrección y re-ejecuta con GLM o Kimi

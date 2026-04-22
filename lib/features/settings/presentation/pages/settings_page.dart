@@ -5,6 +5,7 @@ import '../../../../core/constants/api_constants.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/providers/sync_provider.dart';
+import '../../../../core/providers/theme_provider.dart';
 import '../../../../core/services/api_client.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 
@@ -220,6 +221,22 @@ class SettingsPage extends ConsumerWidget {
             title: const Text('Cambiar contraseña'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _showChangePasswordDialog(context, ref),
+          ),
+          const Divider(),
+          Consumer(
+            builder: (context, ref, _) {
+              final themeMode = ref.watch(themeModeProvider).valueOrNull ?? ThemeMode.light;
+              final isDark = themeMode == ThemeMode.dark;
+              return SwitchListTile(
+                secondary: Icon(
+                  isDark ? Icons.dark_mode : Icons.light_mode,
+                  color: AppColors.primary,
+                ),
+                title: const Text('Modo oscuro'),
+                value: isDark,
+                onChanged: (_) => ref.read(themeModeProvider.notifier).toggle(),
+              );
+            },
           ),
           const Divider(),
           ListTile(

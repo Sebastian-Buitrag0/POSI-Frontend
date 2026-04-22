@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'core/constants/app_colors.dart';
 import 'core/constants/app_routes.dart';
 import 'core/providers/sync_provider.dart';
+import 'core/providers/theme_provider.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/pages/login_page.dart';
 import 'features/auth/presentation/pages/register_page.dart';
@@ -33,6 +34,7 @@ class POSIApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authProvider);
     ref.watch(syncProvider);
+    final themeMode = ref.watch(themeModeProvider).valueOrNull ?? ThemeMode.light;
 
     final router = GoRouter(
       initialLocation: AppRoutes.splash,
@@ -142,6 +144,7 @@ class POSIApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
+      themeMode: themeMode,
       routerConfig: router,
     );
   }
