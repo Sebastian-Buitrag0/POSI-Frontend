@@ -1,19 +1,26 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../config/app_environment.dart';
 import '../constants/api_constants.dart';
+import '../providers/environment_provider.dart';
 
 const _kAccessToken = 'access_token';
 const _kRefreshToken = 'refresh_token';
 const _kCachedUser = 'cached_user';
 
-final apiClientProvider = Provider<ApiClient>((ref) => ApiClient());
+final apiClientProvider = Provider<ApiClient>((ref) {
+  final env = ref.watch(environmentProvider).valueOrNull
+      ?? AppEnvironment.production;
+  return ApiClient(baseUrl: env.baseUrl);
+});
 
 class ApiClient {
-  ApiClient() {
+  ApiClient({String? baseUrl}) {
+    _baseUrl = baseUrl ?? ApiConstants.baseUrl;
     _storage = const FlutterSecureStorage();
     _dio = Dio(BaseOptions(
-      baseUrl: ApiConstants.baseUrl,
+      baseUrl: _baseUrl,
       connectTimeout: const Duration(milliseconds: ApiConstants.connectionTimeout),
       receiveTimeout: const Duration(milliseconds: ApiConstants.receiveTimeout),
       headers: {'Content-Type': 'application/json'},
@@ -21,6 +28,7 @@ class ApiClient {
     _dio.interceptors.add(_buildAuthInterceptor());
   }
 
+  late final String _baseUrl;
   late final Dio _dio;
   late final FlutterSecureStorage _storage;
 
@@ -87,7 +95,7 @@ class ApiClient {
     if (refreshToken == null) return false;
     try {
       final response = await Dio().post(
-        '${ApiConstants.baseUrl}${ApiConstants.refresh}',
+        '$_baseUrl${ApiConstants.refresh}',
         data: {'refreshToken': refreshToken},
       );
       final newAccess = response.data['accessToken'] as String;
@@ -113,4 +121,7 @@ class ApiClient {
 
   Future<Response> delete(String path) =>
       _dio.delete(path);
+
+  Future<Response> patch(String path, {Object? data}) =>
+      _dio.patch(path, data: data);
 }

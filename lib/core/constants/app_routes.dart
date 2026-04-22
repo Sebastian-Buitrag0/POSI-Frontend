@@ -17,4 +17,6 @@ class AppRoutes {
   static const String stats = '/stats';
   static const String userManagement = '/users';
   static const String scannerPicker = '/scanner-picker';
+  static const String gastrobarTables = '/gastrobar/tables';
+  static const String gastrobarOrder = '/gastrobar/orders/:orderId';
 }

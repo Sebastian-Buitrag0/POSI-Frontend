@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'core/config/app_environment.dart';
 import 'core/constants/app_colors.dart';
 import 'core/constants/app_routes.dart';
+import 'core/providers/environment_provider.dart';
 import 'core/providers/sync_provider.dart';
 import 'core/providers/theme_provider.dart';
 import 'core/theme/app_theme.dart';
@@ -21,6 +23,8 @@ import 'features/cash-register/presentation/pages/cash_register_page.dart';
 import 'features/settings/presentation/pages/settings_page.dart';
 import 'features/scanner/presentation/pages/scanner_picker_screen.dart';
 import 'features/users/presentation/pages/user_management_page.dart';
+import 'features/gastrobar/presentation/pages/order_page.dart';
+import 'features/gastrobar/presentation/pages/tables_page.dart';
 import 'features/stats/presentation/pages/stats_page.dart';
 
 void main() {
@@ -135,6 +139,17 @@ class POSIApp extends ConsumerWidget {
             return ScannerPickerScreen(nameResolver: resolver);
           },
         ),
+        GoRoute(
+          path: AppRoutes.gastrobarTables,
+          builder: (_, _) => const TablesPage(),
+        ),
+        GoRoute(
+          path: AppRoutes.gastrobarOrder,
+          builder: (context, state) {
+            final orderId = state.pathParameters['orderId']!;
+            return OrderPage(orderId: orderId);
+          },
+        ),
       ],
       errorBuilder: (context, state) => const _ErrorPage(),
     );
@@ -188,6 +203,32 @@ class _HomePage extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('POSI'),
         actions: [
+          if (kIsDebugMode)
+            Consumer(
+              builder: (_, ref, _) {
+                final env = ref.watch(environmentProvider).valueOrNull;
+                if (env == null || env == AppEnvironment.production) {
+                  return const SizedBox.shrink();
+                }
+                return Container(
+                  margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: env.badgeColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: env.badgeColor),
+                  ),
+                  child: Text(
+                    env.label,
+                    style: TextStyle(
+                      color: env.badgeColor,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                );
+              },
+            ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Row(
@@ -259,6 +300,12 @@ class _HomePage extends ConsumerWidget {
                     label: 'Punto de Venta',
                     color: AppColors.primary,
                     onTap: () => context.push(AppRoutes.pos),
+                  ),
+                  _MenuCard(
+                    icon: Icons.table_restaurant,
+                    label: 'Mesas',
+                    color: Colors.deepOrange,
+                    onTap: () => context.push(AppRoutes.gastrobarTables),
                   ),
                   _MenuCard(
                     icon: Icons.inventory_2_outlined,

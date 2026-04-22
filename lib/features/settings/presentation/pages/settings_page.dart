@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/config/app_environment.dart';
 import '../../../../core/constants/api_constants.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
+import '../../../../core/providers/environment_provider.dart';
 import '../../../../core/providers/sync_provider.dart';
 import '../../../../core/providers/theme_provider.dart';
 import '../../../../core/services/api_client.dart';
@@ -13,6 +15,46 @@ import '../../../auth/presentation/providers/auth_provider.dart';
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
+
+  void _showEnvironmentPicker(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const ListTile(
+            title: Text(
+              'Seleccionar entorno',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          const Divider(),
+          ...AppEnvironment.values.map(
+            (env) => ListTile(
+              leading: Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  color: env.badgeColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              title: Text(env.label),
+              subtitle: Text(env.baseUrl),
+              onTap: () {
+                ref.read(environmentProvider.notifier).setEnvironment(env);
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Cambiado a ${env.label}')),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
 
   Future<void> _showChangePasswordDialog(
       BuildContext context, WidgetRef ref) async {
@@ -213,6 +255,29 @@ class SettingsPage extends ConsumerWidget {
               subtitle: const Text('Invitar y administrar usuarios'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push(AppRoutes.userManagement),
+            ),
+          ],
+          if (kIsDebugMode) ...[
+            const Divider(),
+            Consumer(
+              builder: (context, ref, _) {
+                final env = ref.watch(environmentProvider).valueOrNull
+                    ?? AppEnvironment.production;
+                return ListTile(
+                  leading: Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: env.badgeColor,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  title: const Text('Entorno'),
+                  subtitle: Text(env.label),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _showEnvironmentPicker(context, ref),
+                );
+              },
             ),
           ],
           const Divider(),
