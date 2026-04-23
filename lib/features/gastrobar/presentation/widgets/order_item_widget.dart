@@ -5,9 +5,11 @@ class OrderItemWidget extends StatelessWidget {
   const OrderItemWidget({
     super.key,
     required this.item,
+    this.onCancel,
   });
 
   final OrderItemModel item;
+  final VoidCallback? onCancel;
 
   Color get _statusColor {
     return switch (item.status) {
@@ -79,31 +81,45 @@ class OrderItemWidget extends StatelessWidget {
             ),
         ],
       ),
-      trailing: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.end,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            '\$${item.subtotal.toStringAsFixed(2)}',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: _statusColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              _statusLabel,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w500,
-                color: _statusColor,
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '\$${item.subtotal.toStringAsFixed(2)}',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: _statusColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  _statusLabel,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: _statusColor,
+                  ),
+                ),
+              ),
+            ],
           ),
+          if (onCancel != null && item.status == 'pending')
+            IconButton(
+              icon: Icon(Icons.delete_outline, color: Colors.red.shade300),
+              onPressed: onCancel,
+              iconSize: 20,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              padding: EdgeInsets.zero,
+            ),
         ],
       ),
     );

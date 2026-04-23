@@ -3,10 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/utils/currency_formatter.dart';
-import '../../../../shared/widgets/payment_method_selector.dart';
 import '../../../products/domain/entities/product.dart';
 import '../../../products/presentation/providers/products_provider.dart';
-import '../../../sales/domain/entities/sale.dart';
 import '../../domain/entities/order_model.dart';
 import '../providers/order_provider.dart';
 import '../widgets/order_item_widget.dart';
@@ -278,7 +276,12 @@ class _OrderColumn extends ConsumerWidget {
                   color: Colors.grey,
                   count: order.pendingItems.length,
                 ),
-                ...order.pendingItems.map((i) => OrderItemWidget(item: i)),
+                ...order.pendingItems.map((i) => OrderItemWidget(
+                      item: i,
+                      onCancel: () => ref
+                          .read(orderProvider(orderId).notifier)
+                          .cancelItem(i.id),
+                    )),
               ],
               if (order.sentItems.isNotEmpty) ...[
                 _SectionHeader(
@@ -351,8 +354,8 @@ class _OrderColumn extends ConsumerWidget {
                 onPressed: order.items.isEmpty
                     ? null
                     : () => _showCloseOrderSheet(context, ref, order),
-                icon: const Icon(Icons.check_circle_outline),
-                label: const Text('Cerrar cuenta'),
+                icon: const Icon(Icons.receipt_long),
+                label: const Text('Pedir la cuenta'),
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(48),
                   backgroundColor: Colors.green,
@@ -388,42 +391,21 @@ class _OrderColumn extends ConsumerWidget {
     WidgetRef ref,
     OrderModel order,
   ) {
-    var method = PaymentMethod.cash;
     final notesCtrl = TextEditingController();
 
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      isScrollControlled: true,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) => Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(ctx).viewInsets.bottom,
-            left: 16,
-            right: 16,
-            top: 16,
-          ),
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cerrar mesa'),
+        content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
-                'Cerrar cuenta',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
               Text(
-                'Total: ${CurrencyFormatter.formatWithSymbol(order.total)}',
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
+                'Total: ${CurrencyFormatter.formatWithSymbol(order.total)} — El cliente pagará en caja',
+                style: const TextStyle(fontSize: 16),
                 textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              PaymentMethodSelector(
-                selected: method,
-                onChanged: (m) => setState(() => method = m),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -433,38 +415,42 @@ class _OrderColumn extends ConsumerWidget {
                 ),
                 textCapitalization: TextCapitalization.sentences,
               ),
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: () async {
-                  Navigator.pop(ctx);
-                  try {
-                    await ref
-                        .read(orderProvider(orderId).notifier)
-                        .closeOrder(method.name, notesCtrl.text.trim());
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Cuenta cerrada')),
-                      );
-                      context.go(AppRoutes.salesHistory);
-                    }
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Error: $e'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                  }
-                },
-                icon: const Icon(Icons.check),
-                label: const Text('Confirmar pago'),
-              ),
-              const SizedBox(height: 16),
             ],
           ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await ref
+                    .read(orderProvider(orderId).notifier)
+                    .requestBill(notesCtrl.text.trim().isEmpty ? null : notesCtrl.text.trim());
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Cuenta enviada a caja')),
+                  );
+                  context.go(AppRoutes.gastrobarTables);
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            icon: const Icon(Icons.check),
+            label: const Text('Confirmar'),
+          ),
+        ],
       ),
     );
   }

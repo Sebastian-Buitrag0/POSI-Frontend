@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_routes.dart';
+import '../../../../core/database/app_database.dart';
+import '../../../../core/database/sync_mixin.dart';
 
 import '../../../auth/presentation/providers/auth_provider.dart';
-import '../../domain/entities/table_model.dart';
 import '../providers/tables_provider.dart';
 
 class TablesPage extends ConsumerWidget {
@@ -15,11 +16,21 @@ class TablesPage extends ConsumerWidget {
     final tablesAsync = ref.watch(tablesProvider);
     final user = (ref.watch(authProvider) as AuthAuthenticated?)?.user;
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => context.go(AppRoutes.home));
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: const Text('Mesas'),
         actions: [
-          if (user?.isAdmin == true)
+          IconButton(
+            icon: const Icon(Icons.kitchen),
+            tooltip: 'Cocina',
+            onPressed: () => context.push(AppRoutes.gastrobarKitchen),
+          ),
+          if (user?.isAdmin == true || user?.isManager == true)
             IconButton(
               icon: const Icon(Icons.add),
               tooltip: 'Crear mesa',
@@ -51,7 +62,7 @@ class TablesPage extends ConsumerWidget {
               padding: const EdgeInsets.all(16),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
-                childAspectRatio: 1.2,
+                childAspectRatio: 0.85,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
               ),
@@ -59,35 +70,35 @@ class TablesPage extends ConsumerWidget {
               itemBuilder: (_, index) => _TableCard(
                 table: tables[index],
                 onTap: () => _onTableTap(context, ref, tables[index]),
+                onLongPress: (user?.isAdmin == true || user?.isManager == true)
+                    ? () => _confirmDeleteTable(context, ref, tables[index])
+                    : null,
               ),
             ),
           );
         },
       ),
-      floatingActionButton: user?.isAdmin == true
+      floatingActionButton: user?.isAdmin == true || user?.isManager == true
           ? FloatingActionButton(
               onPressed: () => _showCreateTableSheet(context, ref),
               child: const Icon(Icons.add),
             )
           : null,
+      ),
     );
   }
 
   Future<void> _onTableTap(
     BuildContext context,
     WidgetRef ref,
-    TableModel table,
+    MesasTableData table,
   ) async {
-    if (table.isOccupied) {
-      // Navigate to active order
-      // In a real app, we'd have the orderId. For now, we open a new order
-      // and let the backend handle it, or we'd need an endpoint to get active order.
-      // The spec says "navega a OrderPage de la orden activa".
-      // Since we don't have the orderId directly, we'll try to open order
-      // which should return the existing one if occupied.
+    final isOccupied = table.status == 'occupied';
+
+    if (isOccupied) {
       try {
         final orderId =
-            await ref.read(tablesProvider.notifier).openOrder(table.id);
+            await ref.read(tablesProvider.notifier).openOrder(table.id.toString());
         if (context.mounted) {
           context.push(AppRoutes.gastrobarOrder.replaceAll(':orderId', orderId));
         }
@@ -101,7 +112,7 @@ class TablesPage extends ConsumerWidget {
       return;
     }
 
-    if (!table.isAvailable) return;
+    if (table.status != 'available') return;
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -124,7 +135,7 @@ class TablesPage extends ConsumerWidget {
     if (confirmed == true && context.mounted) {
       try {
         final orderId =
-            await ref.read(tablesProvider.notifier).openOrder(table.id);
+            await ref.read(tablesProvider.notifier).openOrder(table.id.toString());
         if (context.mounted) {
           context.push(AppRoutes.gastrobarOrder.replaceAll(':orderId', orderId));
         }
@@ -142,24 +153,13 @@ class TablesPage extends ConsumerWidget {
     final nameCtrl = TextEditingController();
     final capacityCtrl = TextEditingController(text: '4');
 
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      isScrollControlled: true,
-      builder: (_) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-          left: 16,
-          right: 16,
-          top: 16,
-        ),
-        child: Column(
+      builder: (ctx) => AlertDialog(
+        title: const Text('Nueva mesa'),
+        content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'Nueva mesa',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
             TextField(
               controller: nameCtrl,
               decoration: const InputDecoration(
@@ -167,148 +167,148 @@ class TablesPage extends ConsumerWidget {
                 hintText: 'Mesa 1',
               ),
               textCapitalization: TextCapitalization.sentences,
+              autofocus: true,
             ),
             const SizedBox(height: 12),
             TextField(
               controller: capacityCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Capacidad',
-              ),
+              decoration: const InputDecoration(labelText: 'Capacidad'),
               keyboardType: TextInputType.number,
             ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: () async {
-                final name = nameCtrl.text.trim();
-                final capacity = int.tryParse(capacityCtrl.text.trim()) ?? 4;
-                if (name.isEmpty) return;
-                Navigator.pop(context);
-                try {
-                  await ref
-                      .read(tablesProvider.notifier)
-                      .createTable(name, capacity);
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error: $e')),
-                    );
-                  }
-                }
-              },
-              child: const Text('Crear'),
-            ),
-            const SizedBox(height: 16),
           ],
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final name = nameCtrl.text.trim();
+              final capacity = int.tryParse(capacityCtrl.text.trim()) ?? 4;
+              if (name.isEmpty) return;
+              Navigator.pop(ctx);
+              try {
+                await ref.read(tablesProvider.notifier).createTable(name, capacity);
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('Crear'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteTable(BuildContext context, WidgetRef ref, MesasTableData table) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminar mesa'),
+        content: Text('¿Eliminar "${table.name}"? Esta acción no se puede deshacer.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await ref.read(tablesProvider.notifier).deleteTable(table.id, table.remoteId);
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('Eliminar'),
+          ),
+        ],
       ),
     );
   }
 }
 
 class _TableCard extends StatelessWidget {
-  const _TableCard({required this.table, required this.onTap});
+  const _TableCard({required this.table, required this.onTap, this.onLongPress});
 
-  final TableModel table;
+  final MesasTableData table;
   final VoidCallback onTap;
-
-  Color get _bgColor {
-    return switch (table.status) {
-      'available' => Colors.green.shade50,
-      'occupied' => Colors.orange.shade50,
-      'reserved' => Colors.grey.shade100,
-      _ => Colors.grey.shade100,
-    };
-  }
-
-  Color get _borderColor {
-    return switch (table.status) {
-      'available' => Colors.green,
-      'occupied' => Colors.orange,
-      'reserved' => Colors.grey,
-      _ => Colors.grey,
-    };
-  }
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final color = switch (table.status) {
+      'available' => Colors.green,
+      'occupied' => Colors.deepOrange,
+      'reserved' => Colors.blueGrey,
+      _ => Colors.blueGrey,
+    };
+    final statusLabel = switch (table.status) {
+      'available' => 'Disponible',
+      'occupied' => 'Ocupada',
+      'reserved' => 'Reservada',
+      _ => table.status,
+    };
 
     return Card(
       elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: _borderColor.withValues(alpha: 0.3)),
-      ),
-      color: _bgColor,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      color: color.withValues(alpha: 0.1),
       child: InkWell(
         onTap: onTap,
+        onLongPress: onLongPress,
         borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Row(
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.table_restaurant,
-                    size: 32,
-                    color: _borderColor,
-                  ),
-                  if (table.isOccupied && table.activeOrderItemCount > 0) ...[
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '${table.activeOrderItemCount}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                  Icon(Icons.table_restaurant, size: 40, color: color),
+                  const SizedBox(height: 12),
+                  Text(
+                    table.name,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: color,
+                      fontWeight: FontWeight.w600,
                     ),
-                  ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    statusLabel,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: color.withValues(alpha: 0.8),
+                    ),
+                  ),
                 ],
               ),
-              const SizedBox(height: 12),
-              Text(
-                table.name,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Cap: ${table.capacity}',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: Colors.grey,
+            ),
+            if (table.syncStatus == SyncStatus.pending)
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Icon(
+                  Icons.cloud_off_outlined,
+                  size: 14,
+                  color: color.withValues(alpha: 0.5),
                 ),
               ),
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _borderColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  table.status.toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: _borderColor,
-                  ),
-                ),
-              ),
-            ],
-          ),
+          ],
         ),
       ),
     );

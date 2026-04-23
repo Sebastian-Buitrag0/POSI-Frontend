@@ -1,67 +1,114 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../data/gastrobar_repository.dart';
+import '../../../../core/database/app_database.dart';
+import '../../../../core/database/database_provider.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../data/repositories/gastrobar_local_repository.dart';
 import '../../domain/entities/order_model.dart';
 
 class OrderNotifier extends FamilyAsyncNotifier<OrderModel, String> {
-  late final String _orderId;
+  late final int _localOrderId;
 
   @override
   Future<OrderModel> build(String arg) async {
-    _orderId = arg;
-    return _fetch();
-  }
+    _localOrderId = int.parse(arg);
+    final repo = ref.read(gastrobarLocalRepositoryProvider);
 
-  Future<OrderModel> _fetch() async {
-    final repo = ref.read(gastrobarRepositoryProvider);
-    return repo.getOrder(_orderId);
+    final stream = repo.watchOrderModel(_localOrderId);
+
+    final sub = stream.listen(
+      (data) {
+        if (data != null) {
+          state = AsyncData(data);
+        }
+      },
+      onError: (e, st) => state = AsyncError(e, st),
+    );
+
+    ref.onDispose(sub.cancel);
+
+    final first = await stream.first;
+    if (first == null) throw Exception('Order not found');
+    return first;
   }
 
   Future<void> refresh() async {
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(_fetch);
+    // Stream already updates automatically; trigger a rebuild by reading again
+    final repo = ref.read(gastrobarLocalRepositoryProvider);
+    final order = await repo.getOrderModel(_localOrderId);
+    if (order != null) {
+      state = AsyncData(order);
+    }
   }
 
   Future<void> addItem(String productId, int qty, String? notes) async {
-    final repo = ref.read(gastrobarRepositoryProvider);
-    final current = state.valueOrNull;
-    if (current == null) return;
+    final auth = ref.read(authProvider);
+    if (auth is! AuthAuthenticated) throw Exception('Not authenticated');
 
-    final item = {
-      'productId': productId,
-      'quantity': qty,
-      if (notes != null && notes.isNotEmpty) 'notes': notes,
-    };
+    final db = ref.read(databaseProvider);
+    final repo = ref.read(gastrobarLocalRepositoryProvider);
 
-    final updated = await repo.addItems(_orderId, [item]);
-    state = AsyncData(updated);
+    // Resolve product
+    ProductsTableData? product;
+    final parsed = int.tryParse(productId);
+    if (parsed != null) {
+      product = await db.productsDao.getById(parsed);
+    } else {
+      product = await db.productsDao.getByRemoteId(productId, auth.user.tenantId);
+    }
+
+    if (product == null) throw Exception('Product not found');
+
+    await repo.addItems(_localOrderId, [
+      {
+        'productId': product.remoteId ?? product.id.toString(),
+        'productName': product.name,
+        'unitPrice': product.price,
+        'quantity': qty,
+        if (notes != null && notes.isNotEmpty) 'notes': notes,
+      }
+    ], auth.user.tenantId);
   }
 
   Future<void> sendToKitchen() async {
-    final repo = ref.read(gastrobarRepositoryProvider);
-    final current = state.valueOrNull;
-    if (current == null) return;
+    final repo = ref.read(gastrobarLocalRepositoryProvider);
+    await repo.sendToKitchen(_localOrderId);
+  }
 
-    final pending = current.items.where((i) => i.status == 'pending').toList();
-    if (pending.isEmpty) return;
-
-    for (final item in pending) {
-      await repo.updateItemStatus(_orderId, item.id, 'sent');
-    }
-
-    state = await AsyncValue.guard(_fetch);
+  Future<void> requestBill(String? notes) async {
+    final repo = ref.read(gastrobarLocalRepositoryProvider);
+    await repo.requestBill(_localOrderId, notes);
   }
 
   Future<String> closeOrder(String paymentMethod, String? notes) async {
-    final repo = ref.read(gastrobarRepositoryProvider);
-    final saleId = await repo.closeOrder(_orderId, paymentMethod, notes);
-    state = await AsyncValue.guard(_fetch);
-    return saleId;
+    final auth = ref.read(authProvider);
+    if (auth is! AuthAuthenticated) throw Exception('Not authenticated');
+
+    final repo = ref.read(gastrobarLocalRepositoryProvider);
+    final remoteSaleId = await repo.closeOrder(
+      _localOrderId,
+      paymentMethod,
+      notes,
+      auth.user.tenantId,
+    );
+    return remoteSaleId ?? '';
+  }
+
+  Future<void> cancelItem(String itemId) async {
+    final localId = int.tryParse(itemId);
+    if (localId == null) return;
+    final repo = ref.read(gastrobarLocalRepositoryProvider);
+    await repo.dao.updateItemStatus(localId, 'cancelled');
   }
 
   Future<void> cancelOrder() async {
-    final repo = ref.read(gastrobarRepositoryProvider);
-    await repo.cancelOrder(_orderId);
-    state = await AsyncValue.guard(_fetch);
+    final repo = ref.read(gastrobarLocalRepositoryProvider);
+    final order = await repo.dao.getOrderById(_localOrderId);
+    if (order == null) return;
+
+    await repo.dao.updateOrderStatus(_localOrderId, 'cancelled');
+    await repo.dao.updateTableStatus(order.localMesaId, 'available');
   }
 }
 
