@@ -46,42 +46,51 @@ class UserManagementPage extends ConsumerWidget {
               ),
       },
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showInviteDialog(context, ref),
-        icon: const Icon(Icons.person_add_outlined),
-        label: const Text('Invitar'),
+        onPressed: () => _showCreateLocalSheet(context, ref),
+        icon: const Icon(Icons.person_add),
+        label: const Text('Usuario local'),
       ),
     );
   }
 
-  void _showInviteDialog(BuildContext context, WidgetRef ref) {
-    final emailCtrl = TextEditingController();
+  void _showCreateLocalSheet(BuildContext context, WidgetRef ref) {
     final firstNameCtrl = TextEditingController();
     final lastNameCtrl = TextEditingController();
-    String selectedRole = 'Cashier';
+    final cedulaCtrl = TextEditingController();
+    final passwordCtrl = TextEditingController();
+    String selectedRole = 'Mesero';
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setState) => AlertDialog(
-          title: const Text('Invitar usuario'),
+          title: const Text('Nuevo usuario'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(
-                  controller: emailCtrl,
-                  decoration: const InputDecoration(labelText: 'Correo electrónico'),
-                  keyboardType: TextInputType.emailAddress,
-                ),
-                const SizedBox(height: 8),
-                TextField(
                   controller: firstNameCtrl,
                   decoration: const InputDecoration(labelText: 'Nombre'),
+                  textCapitalization: TextCapitalization.words,
                 ),
                 const SizedBox(height: 8),
                 TextField(
                   controller: lastNameCtrl,
                   decoration: const InputDecoration(labelText: 'Apellido'),
+                  textCapitalization: TextCapitalization.words,
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: cedulaCtrl,
+                  decoration: const InputDecoration(labelText: 'Cédula'),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: passwordCtrl,
+                  decoration: const InputDecoration(labelText: 'Contraseña'),
+                  obscureText: true,
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
@@ -91,8 +100,9 @@ class UserManagementPage extends ConsumerWidget {
                     DropdownMenuItem(value: 'Admin', child: Text('Admin')),
                     DropdownMenuItem(value: 'Manager', child: Text('Manager')),
                     DropdownMenuItem(value: 'Cashier', child: Text('Cajero')),
+                    DropdownMenuItem(value: 'Mesero', child: Text('Mesero')),
                   ],
-                  onChanged: (v) => setState(() => selectedRole = v ?? 'Cashier'),
+                  onChanged: (v) => setState(() => selectedRole = v ?? 'Mesero'),
                 ),
               ],
             ),
@@ -105,25 +115,23 @@ class UserManagementPage extends ConsumerWidget {
             ElevatedButton(
               onPressed: () async {
                 Navigator.pop(ctx);
-                final error = await ref.read(usersProvider.notifier).invite(
-                      email: emailCtrl.text.trim(),
+                final error = await ref.read(usersProvider.notifier).createLocal(
                       firstName: firstNameCtrl.text.trim(),
                       lastName: lastNameCtrl.text.trim(),
+                      cedula: cedulaCtrl.text.trim(),
                       role: selectedRole,
+                      password: passwordCtrl.text,
                     );
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text(error == null
-                          ? 'Invitación enviada a ${emailCtrl.text.trim()}'
-                          : 'Error: $error'),
-                      backgroundColor:
-                          error == null ? AppColors.success : AppColors.error,
+                      content: Text(error == null ? 'Usuario creado' : 'Error: $error'),
+                      backgroundColor: error == null ? AppColors.success : AppColors.error,
                     ),
                   );
                 }
               },
-              child: const Text('Invitar'),
+              child: const Text('Crear'),
             ),
           ],
         ),
@@ -222,6 +230,7 @@ class _UserTile extends ConsumerWidget {
               DropdownMenuItem(value: 'Admin', child: Text('Admin')),
               DropdownMenuItem(value: 'Manager', child: Text('Manager')),
               DropdownMenuItem(value: 'Cashier', child: Text('Cajero')),
+              DropdownMenuItem(value: 'Mesero', child: Text('Mesero')),
             ],
             onChanged: (v) => setState(() => selectedRole = v ?? user.role),
           ),

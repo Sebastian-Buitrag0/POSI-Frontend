@@ -14,6 +14,7 @@ import 'features/auth/presentation/pages/register_page.dart';
 import 'features/auth/presentation/pages/email_verification_page.dart';
 import 'features/auth/presentation/pages/forgot_password_page.dart';
 import 'features/auth/presentation/providers/auth_provider.dart';
+import 'features/cash-register/presentation/providers/cash_register_provider.dart';
 import 'features/products/presentation/pages/product_list_page.dart';
 import 'features/products/presentation/pages/product_form_page.dart';
 import 'features/scanner/presentation/pages/scanner_screen.dart';
@@ -23,6 +24,7 @@ import 'features/cash-register/presentation/pages/cash_register_page.dart';
 import 'features/settings/presentation/pages/settings_page.dart';
 import 'features/scanner/presentation/pages/scanner_picker_screen.dart';
 import 'features/users/presentation/pages/user_management_page.dart';
+import 'features/gastrobar/presentation/pages/kitchen_page.dart';
 import 'features/gastrobar/presentation/pages/order_page.dart';
 import 'features/gastrobar/presentation/pages/tables_page.dart';
 import 'features/stats/presentation/pages/stats_page.dart';
@@ -149,6 +151,10 @@ class POSIApp extends ConsumerWidget {
             final orderId = state.pathParameters['orderId']!;
             return OrderPage(orderId: orderId);
           },
+        ),
+        GoRoute(
+          path: AppRoutes.gastrobarKitchen,
+          builder: (_, _) => const KitchenPage(),
         ),
       ],
       errorBuilder: (context, state) => const _ErrorPage(),
@@ -295,36 +301,65 @@ class _HomePage extends ConsumerWidget {
                 mainAxisSpacing: 12,
                 childAspectRatio: 1.1,
                 children: [
-                  _MenuCard(
-                    icon: Icons.point_of_sale,
-                    label: 'Punto de Venta',
-                    color: AppColors.primary,
-                    onTap: () => context.push(AppRoutes.pos),
-                  ),
+                  if (user?.isWaiter != true)
+                    _MenuCard(
+                      icon: Icons.point_of_sale,
+                      label: 'Punto de Venta',
+                      color: AppColors.primary,
+                      onTap: () {
+                        final cr = ref.read(cashRegisterProvider);
+                        if (!cr.isRestoring && !cr.isOpen) {
+                          showDialog(
+                            context: context,
+                            builder: (_) => AlertDialog(
+                              title: const Text('Caja cerrada'),
+                              content: const Text('Debes abrir la caja antes de usar el punto de venta.'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('Cancelar'),
+                                ),
+                                FilledButton(
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                    context.push(AppRoutes.cashRegister);
+                                  },
+                                  child: const Text('Ir a Caja'),
+                                ),
+                              ],
+                            ),
+                          );
+                          return;
+                        }
+                        context.push(AppRoutes.pos);
+                      },
+                    ),
                   _MenuCard(
                     icon: Icons.table_restaurant,
                     label: 'Mesas',
                     color: Colors.deepOrange,
                     onTap: () => context.push(AppRoutes.gastrobarTables),
                   ),
-                  _MenuCard(
-                    icon: Icons.inventory_2_outlined,
-                    label: 'Productos',
-                    color: AppColors.secondary,
-                    onTap: () => context.push(AppRoutes.products),
-                  ),
-                  _MenuCard(
-                    icon: Icons.receipt_long_outlined,
-                    label: 'Historial',
-                    color: AppColors.accent,
-                    onTap: () => context.push(AppRoutes.salesHistory),
-                  ),
-                  _MenuCard(
-                    icon: Icons.store_outlined,
-                    label: 'Caja',
-                    color: AppColors.info,
-                    onTap: () => context.push(AppRoutes.cashRegister),
-                  ),
+                  if (user?.isWaiter != true) ...[
+                    _MenuCard(
+                      icon: Icons.inventory_2_outlined,
+                      label: 'Productos',
+                      color: AppColors.secondary,
+                      onTap: () => context.push(AppRoutes.products),
+                    ),
+                    _MenuCard(
+                      icon: Icons.receipt_long_outlined,
+                      label: 'Historial',
+                      color: AppColors.accent,
+                      onTap: () => context.push(AppRoutes.salesHistory),
+                    ),
+                    _MenuCard(
+                      icon: Icons.store_outlined,
+                      label: 'Caja',
+                      color: AppColors.info,
+                      onTap: () => context.push(AppRoutes.cashRegister),
+                    ),
+                  ],
                   if (user?.isAdmin == true) ...[
                     _MenuCard(
                       icon: Icons.bar_chart_rounded,

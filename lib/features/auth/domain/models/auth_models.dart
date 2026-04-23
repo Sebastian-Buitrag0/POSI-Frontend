@@ -1,11 +1,11 @@
 import '../entities/user_entity.dart';
 
 class LoginRequest {
-  const LoginRequest({required this.email, required this.password});
-  final String email;
+  const LoginRequest({required this.identifier, required this.password});
+  final String identifier;
   final String password;
 
-  Map<String, dynamic> toJson() => {'email': email, 'password': password};
+  Map<String, dynamic> toJson() => {'identifier': identifier, 'password': password};
 }
 
 class RegisterRequest {

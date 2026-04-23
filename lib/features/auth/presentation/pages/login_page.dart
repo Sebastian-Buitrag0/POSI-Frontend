@@ -3,7 +3,9 @@ import 'package:flutter_form_builder/flutter_form_builder.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:form_builder_validators/form_builder_validators.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/config/app_environment.dart';
 import '../../../../core/constants/app_routes.dart';
+import '../../../../core/providers/environment_provider.dart';
 import '../providers/auth_provider.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
@@ -81,17 +83,28 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   child: Column(
                     children: [
                       FormBuilderTextField(
-                        name: 'email',
+                        name: 'identifier',
                         decoration: const InputDecoration(
-                          labelText: 'Correo electrónico',
-                          prefixIcon: Icon(Icons.email_outlined),
+                          labelText: 'Correo o cédula',
+                          hintText: 'usuario@email.com o 1234567890',
+                          prefixIcon: Icon(Icons.person_outlined),
                         ),
-                        keyboardType: TextInputType.emailAddress,
+                        keyboardType: TextInputType.text,
                         validator: FormBuilderValidators.compose([
                           FormBuilderValidators.required(
-                              errorText: 'El correo es requerido'),
-                          FormBuilderValidators.email(
-                              errorText: 'Correo inválido'),
+                              errorText: 'El correo o cédula es requerido'),
+                          (val) {
+                            if (val == null || val.isEmpty) return null;
+                            if (val.contains('@')) {
+                              final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+                              if (!emailRegex.hasMatch(val)) {
+                                return 'Correo inválido';
+                              }
+                            } else if (val.length < 6) {
+                              return 'La cédula debe tener al menos 6 caracteres';
+                            }
+                            return null;
+                          },
                         ]),
                       ),
                       const SizedBox(height: 16),
@@ -136,10 +149,81 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   onPressed: () => context.push(AppRoutes.forgotPassword),
                   child: const Text('¿Olvidaste tu contraseña?'),
                 ),
+                if (kIsDebugMode) ...[
+                  const SizedBox(height: 24),
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final env = ref.watch(environmentProvider).valueOrNull
+                          ?? AppEnvironment.production;
+                      return GestureDetector(
+                        onTap: () => _showEnvironmentPicker(context, ref),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: env.badgeColor),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                width: 8, height: 8,
+                                decoration: BoxDecoration(
+                                  color: env.badgeColor,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                env.label,
+                                style: TextStyle(
+                                  color: env.badgeColor,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Icon(Icons.expand_more, size: 14, color: env.badgeColor),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ],
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  void _showEnvironmentPicker(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const ListTile(
+            title: Text('Entorno', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          const Divider(),
+          ...AppEnvironment.values.map((env) => ListTile(
+            leading: Container(
+              width: 12, height: 12,
+              decoration: BoxDecoration(color: env.badgeColor, shape: BoxShape.circle),
+            ),
+            title: Text(env.label),
+            subtitle: Text(env.baseUrl, style: const TextStyle(fontSize: 11)),
+            onTap: () {
+              ref.read(environmentProvider.notifier).setEnvironment(env);
+              Navigator.pop(context);
+            },
+          )),
+          const SizedBox(height: 16),
+        ],
       ),
     );
   }
@@ -149,7 +233,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       final values = _formKey.currentState!.value;
       ref
           .read(authProvider.notifier)
-          .login(values['email'] as String, values['password'] as String);
+          .login(values['identifier'] as String, values['password'] as String);
     }
   }
 }

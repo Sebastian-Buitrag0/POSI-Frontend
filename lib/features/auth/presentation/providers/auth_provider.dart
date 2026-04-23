@@ -85,12 +85,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  Future<void> login(String email, String password) async {
+  Future<void> login(String identifier, String password) async {
     state = const AuthLoading();
     try {
       final response = await _api.post(
         ApiConstants.login,
-        data: LoginRequest(email: email, password: password).toJson(),
+        data: LoginRequest(identifier: identifier, password: password).toJson(),
       );
       final auth = AuthResponse.fromJson(response.data as Map<String, dynamic>);
       await _api.saveTokens(
@@ -170,7 +170,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       e.error.toString().contains('NetworkException');
 
   String _parseError(Exception e) {
-    if (e.toString().contains('401')) return 'Email o contraseña incorrectos';
+    if (e.toString().contains('401')) return 'Credenciales incorrectos';
     if (e.toString().contains('409')) return 'El email ya está registrado';
     if (e.toString().contains('SocketException')) return 'Sin conexión a internet';
     return 'Error inesperado. Intenta de nuevo.';

@@ -68,12 +68,15 @@ class UsersNotifier extends StateNotifier<UsersState> {
   final ApiClient _api;
 
   Future<void> load() async {
+    if (!mounted) return;
     state = const UsersLoading();
     try {
       final response = await _api.get(ApiConstants.users);
       final list = (response.data as List).cast<Map<String, dynamic>>();
+      if (!mounted) return;
       state = UsersLoaded(list.map(TenantUser.fromJson).toList());
     } on Exception catch (e) {
+      if (!mounted) return;
       state = UsersError(e.toString());
     }
   }
@@ -111,6 +114,28 @@ class UsersNotifier extends StateNotifier<UsersState> {
   Future<String?> remove(String userId) async {
     try {
       await _api.delete('${ApiConstants.users}/$userId');
+      await load();
+      return null;
+    } on Exception catch (e) {
+      return e.toString();
+    }
+  }
+
+  Future<String?> createLocal({
+    required String firstName,
+    required String lastName,
+    required String cedula,
+    required String role,
+    required String password,
+  }) async {
+    try {
+      await _api.post(ApiConstants.usersCreateLocal, data: {
+        'firstName': firstName,
+        'lastName': lastName,
+        'cedula': cedula,
+        'role': role,
+        'password': password,
+      });
       await load();
       return null;
     } on Exception catch (e) {

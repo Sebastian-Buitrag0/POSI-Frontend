@@ -19,6 +19,8 @@ class UserEntity {
 
   String get fullName => '$firstName $lastName';
   bool get isAdmin => role == 'Admin';
+  bool get isManager => role == 'Manager';
+  bool get isWaiter => role == 'Mesero';
 
   UserEntity copyWith({
     String? id,
