@@ -38,6 +38,7 @@ class ApiConstants {
   // Users
   static const String users = '/api/users';
   static const String usersInvite = '/api/users/invite';
+  static const String usersCreateLocal = '/api/users/create-local';
 
   // Sync
   static const String productsSync = '/api/products/sync';

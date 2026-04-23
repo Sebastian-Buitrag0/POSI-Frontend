@@ -19,4 +19,5 @@ class AppRoutes {
   static const String scannerPicker = '/scanner-picker';
   static const String gastrobarTables = '/gastrobar/tables';
   static const String gastrobarOrder = '/gastrobar/orders/:orderId';
+  static const String gastrobarKitchen = '/gastrobar/kitchen';
 }

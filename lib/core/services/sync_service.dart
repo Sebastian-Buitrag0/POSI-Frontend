@@ -7,6 +7,7 @@ import '../database/sync_mixin.dart';
 import 'api_client.dart';
 import '../../features/products/data/daos/products_dao.dart';
 import '../../features/sales/data/daos/sales_dao.dart';
+import '../../features/gastrobar/data/daos/gastrobar_dao.dart';
 
 final syncServiceProvider = Provider<SyncService>((ref) {
   final db = ref.watch(databaseProvider);
@@ -14,6 +15,7 @@ final syncServiceProvider = Provider<SyncService>((ref) {
   return SyncService(
     productsDao: db.productsDao,
     salesDao: db.salesDao,
+    gastrobarDao: db.gastrobarDao,
     api: api,
   );
 });
@@ -22,28 +24,36 @@ class SyncResult {
   const SyncResult({
     required this.productsSynced,
     required this.salesSynced,
+    required this.ordersSynced,
   });
   final int productsSynced;
   final int salesSynced;
+  final int ordersSynced;
 }
 
 class SyncService {
   SyncService({
     required this.productsDao,
     required this.salesDao,
+    required this.gastrobarDao,
     required this.api,
   });
 
   final ProductsDao productsDao;
   final SalesDao salesDao;
+  final GastrobarDao gastrobarDao;
   final ApiClient api;
 
   Future<SyncResult> sync(String tenantId) async {
     await _pullProducts(tenantId);
     final productsSynced = await _syncProducts(tenantId);
     final salesSynced = await _syncSales(tenantId);
+    final ordersSynced = await _syncOrders(tenantId);
     return SyncResult(
-        productsSynced: productsSynced, salesSynced: salesSynced);
+      productsSynced: productsSynced,
+      salesSynced: salesSynced,
+      ordersSynced: ordersSynced,
+    );
   }
 
   Future<void> _pullProducts(String tenantId) async {
@@ -151,5 +161,34 @@ class SyncService {
       );
     }
     return response.data['synced'] as int;
+  }
+
+  Future<int> _syncOrders(String tenantId) async {
+    final pending = await gastrobarDao.getPendingOrders(tenantId);
+    if (pending.isEmpty) return 0;
+
+    int synced = 0;
+
+    for (final order in pending) {
+      try {
+        final table = await gastrobarDao.watchActiveTables(tenantId)
+            .map((list) => list.firstWhere((t) => t.id == order.localMesaId))
+            .first;
+
+        if (table.remoteId == null) continue;
+
+        final res = await api.post('/api/gastrobar/tables/${table.remoteId}/orders');
+        final remoteId = (res.data['id'] ?? res.data['orderId']) as String?;
+
+        if (remoteId != null) {
+          await gastrobarDao.markOrderSynced(order.id, remoteId);
+          synced++;
+        }
+      } catch (_) {
+        // Leave as pending for next cycle
+      }
+    }
+
+    return synced;
   }
 }

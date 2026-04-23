@@ -10,12 +10,21 @@ const _kRefreshToken = 'refresh_token';
 const _kCachedUser = 'cached_user';
 
 final apiClientProvider = Provider<ApiClient>((ref) {
-  final env = ref.watch(environmentProvider).valueOrNull
-      ?? AppEnvironment.production;
-  return ApiClient(baseUrl: env.baseUrl);
+  final client = ApiClient(baseUrl: ApiConstants.baseUrl);
+  ref.listen(environmentProvider, (_, next) {
+    final env = next.valueOrNull;
+    if (env != null) client.updateBaseUrl(env.baseUrl);
+  });
+  final env = ref.read(environmentProvider).valueOrNull;
+  if (env != null) client.updateBaseUrl(env.baseUrl);
+  return client;
 });
 
 class ApiClient {
+  void updateBaseUrl(String baseUrl) {
+    _dio.options.baseUrl = baseUrl;
+  }
+
   ApiClient({String? baseUrl}) {
     _baseUrl = baseUrl ?? ApiConstants.baseUrl;
     _storage = const FlutterSecureStorage();
