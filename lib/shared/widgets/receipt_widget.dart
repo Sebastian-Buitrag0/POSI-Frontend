@@ -68,8 +68,6 @@ class ReceiptWidget extends StatelessWidget {
             ),
           ),
           const Divider(height: 16),
-          _TotalRow('Subtotal', sale.subtotal, theme),
-          _TotalRow('IVA (16%)', sale.tax, theme),
           _TotalRow('TOTAL', sale.total, theme, bold: true, large: true),
           const SizedBox(height: 8),
           Row(

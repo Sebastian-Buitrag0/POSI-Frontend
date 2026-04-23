@@ -11,6 +11,7 @@ import '../../../sales/domain/entities/sales_summary.dart';
 class CashRegisterState {
   const CashRegisterState({
     this.isOpen = false,
+    this.isRestoring = true,
     this.openingCash = 0,
     this.openedAt,
     this.sales = const [],
@@ -20,6 +21,7 @@ class CashRegisterState {
   });
 
   final bool isOpen;
+  final bool isRestoring;
   final double openingCash;
   final DateTime? openedAt;
   final List<Sale> sales;
@@ -31,6 +33,7 @@ class CashRegisterState {
 
   CashRegisterState copyWith({
     bool? isOpen,
+    bool? isRestoring,
     double? openingCash,
     DateTime? openedAt,
     List<Sale>? sales,
@@ -40,6 +43,7 @@ class CashRegisterState {
   }) =>
       CashRegisterState(
         isOpen: isOpen ?? this.isOpen,
+        isRestoring: isRestoring ?? this.isRestoring,
         openingCash: openingCash ?? this.openingCash,
         openedAt: openedAt ?? this.openedAt,
         sales: sales ?? this.sales,
@@ -67,7 +71,10 @@ class CashRegisterNotifier extends StateNotifier<CashRegisterState> {
 
   Future<void> _restoreFromStorage() async {
     final status = await _storage.read(key: _keyStatus);
-    if (status != 'open') return;
+    if (status != 'open') {
+      state = state.copyWith(isRestoring: false);
+      return;
+    }
 
     final cashStr = await _storage.read(key: _keyOpeningCash) ?? '0';
     final atStr = await _storage.read(key: _keyOpenedAt) ?? '';
@@ -77,6 +84,7 @@ class CashRegisterNotifier extends StateNotifier<CashRegisterState> {
 
     state = state.copyWith(
       isOpen: true,
+      isRestoring: false,
       openingCash: openingCash,
       openedAt: openedAt,
     );

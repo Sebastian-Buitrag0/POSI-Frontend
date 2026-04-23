@@ -12,6 +12,10 @@ import '../../domain/entities/sale.dart';
 import '../providers/cart_provider.dart';
 import '../providers/checkout_provider.dart';
 import '../widgets/cart_item_widget.dart';
+import '../../../cash-register/presentation/providers/cash_register_provider.dart';
+import '../../../gastrobar/data/daos/gastrobar_dao.dart' show PendingPaymentOrder;
+import '../../../gastrobar/data/repositories/gastrobar_local_repository.dart';
+import '../../../gastrobar/presentation/providers/pending_orders_provider.dart';
 
 class PosPage extends ConsumerStatefulWidget {
   const PosPage({super.key});
@@ -54,6 +58,13 @@ class _PosPageState extends ConsumerState<PosPage> {
       appBar: AppBar(
         title: const Text('Punto de Venta'),
         actions: [
+          _PendingTablesButton(onSelected: (order, items) {
+            ref.read(cartProvider.notifier).loadGastrobarOrder(
+              comandaLocalId: order.comandaLocalId,
+              tableName: order.tableName,
+              items: items,
+            );
+          }),
           IconButton(
             icon: const Icon(Icons.qr_code_scanner),
             tooltip: 'Escanear',
@@ -74,6 +85,29 @@ class _PosPageState extends ConsumerState<PosPage> {
       ),
       body: Column(
         children: [
+          if (cart.gastrobarTableName != null)
+            Container(
+              width: double.infinity,
+              color: Theme.of(context).colorScheme.primaryContainer,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.table_restaurant,
+                      size: 16,
+                      color: Theme.of(context).colorScheme.onPrimaryContainer),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Cuenta de ${cart.gastrobarTableName}',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           Expanded(
             child: cart.isEmpty
                 ? _EmptyCart(
@@ -141,22 +175,35 @@ class _PosPageState extends ConsumerState<PosPage> {
   }
 
   void _showProductPicker(BuildContext context) {
-    showModalBottomSheet<void>(
+    showDialog<void>(
       context: context,
-      isScrollControlled: true,
-      builder: (_) => const _ProductPickerSheet(),
+      builder: (ctx) => AlertDialog(
+        title: const Text('Buscar producto'),
+        content: const SizedBox(
+          width: double.maxFinite,
+          height: 400,
+          child: _ProductPickerSheet(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
     );
   }
 
   void _showReceipt(BuildContext context, Sale sale) {
-    showModalBottomSheet<void>(
+    showDialog<void>(
       context: context,
-      isScrollControlled: true,
-      isDismissible: false,
-      enableDrag: false,
-      builder: (_) => ReceiptWidget(
-        sale: sale,
-        onClose: () => Navigator.of(context).pop(),
+      barrierDismissible: false,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        child: ReceiptWidget(
+          sale: sale,
+          onClose: () => Navigator.of(ctx).pop(),
+        ),
       ),
     );
   }
@@ -195,6 +242,8 @@ class _CheckoutPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final cashRegister = ref.watch(cashRegisterProvider);
+    final isCashOpen = cashRegister.isOpen;
 
     return Container(
       decoration: BoxDecoration(
@@ -211,26 +260,6 @@ class _CheckoutPanel extends ConsumerWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Subtotal', style: theme.textTheme.bodyMedium),
-              Text(CurrencyFormatter.format(cart.subtotal),
-                  style: theme.textTheme.bodyMedium),
-            ],
-          ),
-          const SizedBox(height: 2),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('IVA 16%',
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: Colors.grey)),
-              Text(CurrencyFormatter.format(cart.tax),
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: Colors.grey)),
-            ],
-          ),
           const SizedBox(height: 4),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -254,8 +283,31 @@ class _CheckoutPanel extends ConsumerWidget {
                 ref.read(cartProvider.notifier).setPaymentMethod(m),
           ),
           const SizedBox(height: 12),
+          if (!isCashOpen)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.lock_outline, color: Colors.orange.shade700, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Caja cerrada — abre la caja para vender',
+                      style: TextStyle(color: Colors.orange.shade900),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           FilledButton.icon(
-            onPressed: cart.isEmpty || isProcessing
+            onPressed: cart.isEmpty || isProcessing || !isCashOpen
                 ? null
                 : () => ref.read(checkoutProvider.notifier).processCheckout(),
             icon: isProcessing
@@ -338,69 +390,149 @@ class _ProductPickerSheetState extends ConsumerState<_ProductPickerSheet> {
   Widget build(BuildContext context) {
     final productsAsync = ref.watch(productsStreamProvider);
 
-    return DraggableScrollableSheet(
-      initialChildSize: 0.7,
-      minChildSize: 0.4,
-      maxChildSize: 0.95,
-      expand: false,
-      builder: (_, scrollController) => Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(2),
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(0, 0, 0, 8),
+          child: SearchBar(
+            controller: _searchController,
+            hintText: 'Buscar producto...',
+            leading: const Icon(Icons.search),
+            onChanged: (v) =>
+                ref.read(productSearchQueryProvider.notifier).state = v,
+          ),
+        ),
+        Expanded(
+          child: productsAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => Center(child: Text('Error: $e')),
+            data: (products) => ListView.builder(
+              itemCount: products.length,
+              itemBuilder: (_, i) {
+                final p = products[i];
+                final inCart = ref
+                    .read(cartProvider)
+                    .items
+                    .any((ci) => ci.productId == p.id);
+                return ListTile(
+                  title: Text(p.name),
+                  subtitle: Text(
+                      '${CurrencyFormatter.format(p.price)} — Stock: ${p.stock}'),
+                  trailing: p.stock > 0
+                      ? IconButton(
+                          icon: Icon(
+                            inCart
+                                ? Icons.add_circle
+                                : Icons.add_circle_outline,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          onPressed: () {
+                            ref.read(cartProvider.notifier).addItem(p);
+                          },
+                        )
+                      : const Chip(label: Text('Sin stock')),
+                  enabled: p.stock > 0 && p.isActive,
+                );
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PendingTablesButton extends ConsumerWidget {
+  const _PendingTablesButton({required this.onSelected});
+
+  final void Function(
+    PendingPaymentOrder order,
+    List<({int itemId, String productName, double unitPrice, int quantity})> items,
+  ) onSelected;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pendingAsync = ref.watch(pendingPaymentOrdersProvider);
+    final count = pendingAsync.valueOrNull?.length ?? 0;
+
+    if (count == 0) return const SizedBox.shrink();
+
+    return Stack(
+      alignment: Alignment.topRight,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.table_restaurant),
+          tooltip: 'Cuentas de mesa',
+          onPressed: () => _showDialog(context, ref),
+        ),
+        Positioned(
+          top: 6,
+          right: 6,
+          child: Container(
+            padding: const EdgeInsets.all(3),
+            decoration: const BoxDecoration(
+              color: Colors.red,
+              shape: BoxShape.circle,
+            ),
+            child: Text(
+              '$count',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
               ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: SearchBar(
-              controller: _searchController,
-              hintText: 'Buscar producto...',
-              leading: const Icon(Icons.search),
-              onChanged: (v) =>
-                  ref.read(productSearchQueryProvider.notifier).state = v,
-            ),
-          ),
-          Expanded(
-            child: productsAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('Error: $e')),
-              data: (products) => ListView.builder(
-                controller: scrollController,
-                itemCount: products.length,
-                itemBuilder: (_, i) {
-                  final p = products[i];
-                  final inCart = ref
-                      .read(cartProvider)
-                      .items
-                      .any((ci) => ci.productId == p.id);
-                  return ListTile(
-                    title: Text(p.name),
-                    subtitle: Text(
-                        '${CurrencyFormatter.format(p.price)} — Stock: ${p.stock}'),
-                    trailing: p.stock > 0
-                        ? IconButton(
-                            icon: Icon(
-                              inCart
-                                  ? Icons.add_circle
-                                  : Icons.add_circle_outline,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                            onPressed: () {
-                              ref.read(cartProvider.notifier).addItem(p);
-                            },
-                          )
-                        : const Chip(label: Text('Sin stock')),
-                    enabled: p.stock > 0 && p.isActive,
-                  );
-                },
-              ),
-            ),
+        ),
+      ],
+    );
+  }
+
+  void _showDialog(BuildContext context, WidgetRef ref) {
+    final orders = ref.read(pendingPaymentOrdersProvider).valueOrNull ?? [];
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cuentas pendientes de mesa'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: orders.isEmpty
+              ? const Text('Sin cuentas pendientes')
+              : ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: orders.length,
+                  separatorBuilder: (context, index) => const Divider(height: 1),
+                  itemBuilder: (_, i) {
+                    final order = orders[i];
+                    return ListTile(
+                      leading: const Icon(Icons.table_restaurant),
+                      title: Text(order.tableName),
+                      subtitle: Text(order.orderNumber),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () async {
+                        Navigator.pop(ctx);
+                        final repo = ref.read(gastrobarLocalRepositoryProvider);
+                        final rawItems = await repo.getItemsByOrder(order.comandaLocalId);
+                        final items = rawItems
+                            .where((i) => i.itemStatus != 'cancelled')
+                            .map((i) => (
+                                  itemId: i.id,
+                                  productName: i.productName,
+                                  unitPrice: i.unitPrice,
+                                  quantity: i.quantity,
+                                ))
+                            .toList();
+                        onSelected(order, items);
+                      },
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cerrar'),
           ),
         ],
       ),

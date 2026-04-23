@@ -34,8 +34,8 @@ class LocalSalesRepository implements SalesRepository {
     final now = DateTime.now();
     final saleNumber = 'S${now.millisecondsSinceEpoch}';
     final subtotal = items.fold(0.0, (sum, i) => sum + i.subtotal);
-    final tax = subtotal * 0.16;
-    final total = subtotal + tax;
+    const tax = 0.0;
+    final total = subtotal;
 
     return db.transaction<Sale>(() async {
       final saleId = await salesDao.insertSale(

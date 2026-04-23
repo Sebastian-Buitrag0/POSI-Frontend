@@ -56,13 +56,21 @@ class CartItemWidget extends ConsumerWidget {
                     onPressed: () =>
                         notifier.updateQuantity(item.productId, item.quantity - 1),
                   ),
-                  SizedBox(
-                    width: 28,
-                    child: Text(
-                      '${item.quantity}',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodyMedium
-                          ?.copyWith(fontWeight: FontWeight.bold),
+                  GestureDetector(
+                    onTap: () => _editQuantity(context, notifier),
+                    child: Container(
+                      width: 36,
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.4)),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '${item.quantity}',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodyMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ),
                   IconButton(
@@ -89,5 +97,39 @@ class CartItemWidget extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  void _editQuantity(BuildContext context, CartNotifier notifier) {
+    final ctrl = TextEditingController(text: '${item.quantity}');
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(item.productName, maxLines: 1, overflow: TextOverflow.ellipsis),
+        content: TextField(
+          controller: ctrl,
+          keyboardType: TextInputType.number,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Cantidad'),
+          onSubmitted: (_) => _applyQuantity(ctx, ctrl, notifier),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          FilledButton(
+            onPressed: () => _applyQuantity(ctx, ctrl, notifier),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _applyQuantity(BuildContext ctx, TextEditingController ctrl, CartNotifier notifier) {
+    final qty = int.tryParse(ctrl.text.trim()) ?? 0;
+    Navigator.pop(ctx);
+    if (qty <= 0) {
+      notifier.removeItem(item.productId);
+    } else {
+      notifier.updateQuantity(item.productId, qty);
+    }
   }
 }

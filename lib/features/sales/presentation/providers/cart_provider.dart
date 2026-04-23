@@ -8,15 +8,19 @@ class CartState {
     this.items = const [],
     this.paymentMethod = PaymentMethod.cash,
     this.isProcessing = false,
+    this.gastrobarOrderId,
+    this.gastrobarTableName,
   });
 
   final List<CartItem> items;
   final PaymentMethod paymentMethod;
   final bool isProcessing;
+  final int? gastrobarOrderId;
+  final String? gastrobarTableName;
 
   double get subtotal => items.fold(0.0, (s, i) => s + i.subtotal);
-  double get tax => subtotal * 0.16;
-  double get total => subtotal + tax;
+  double get tax => 0.0;
+  double get total => subtotal;
   int get itemCount => items.fold(0, (s, i) => s + i.quantity);
   bool get isEmpty => items.isEmpty;
 
@@ -24,10 +28,14 @@ class CartState {
     List<CartItem>? items,
     PaymentMethod? paymentMethod,
     bool? isProcessing,
+    int? gastrobarOrderId,
+    String? gastrobarTableName,
   }) => CartState(
     items: items ?? this.items,
     paymentMethod: paymentMethod ?? this.paymentMethod,
     isProcessing: isProcessing ?? this.isProcessing,
+    gastrobarOrderId: gastrobarOrderId ?? this.gastrobarOrderId,
+    gastrobarTableName: gastrobarTableName ?? this.gastrobarTableName,
   );
 }
 
@@ -88,6 +96,26 @@ class CartNotifier extends StateNotifier<CartState> {
 
   void setPaymentMethod(PaymentMethod method) =>
       state = state.copyWith(paymentMethod: method);
+
+  void loadGastrobarOrder({
+    required int comandaLocalId,
+    required String tableName,
+    required List<({int itemId, String productName, double unitPrice, int quantity})> items,
+  }) {
+    state = CartState(
+      items: items
+          .map((i) => CartItem(
+                productId: i.itemId,
+                productName: i.productName,
+                unitPrice: i.unitPrice,
+                quantity: i.quantity,
+                maxStock: 999,
+              ))
+          .toList(),
+      gastrobarOrderId: comandaLocalId,
+      gastrobarTableName: tableName,
+    );
+  }
 
   void clearCart() => state = const CartState();
 }
