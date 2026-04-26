@@ -6,6 +6,7 @@ import '../../../../core/constants/api_constants.dart';
 import '../../../../core/services/api_client.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/models/auth_models.dart';
+import '../../../cash-register/presentation/providers/cash_register_provider.dart';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -44,17 +45,18 @@ class AuthEmailNotVerified extends AuthState {
 // ── Provider ───────────────────────────────────────────────────────────────
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  return AuthNotifier(ref.watch(apiClientProvider));
+  return AuthNotifier(ref.watch(apiClientProvider), ref);
 });
 
 // ── Notifier ───────────────────────────────────────────────────────────────
 
 class AuthNotifier extends StateNotifier<AuthState> {
-  AuthNotifier(this._api) : super(const AuthInitial()) {
+  AuthNotifier(this._api, this._ref) : super(const AuthInitial()) {
     _checkExistingSession();
   }
 
   final ApiClient _api;
+  final Ref _ref;
 
   Future<void> _checkExistingSession() async {
     final token = await _api.getAccessToken();
@@ -101,7 +103,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _api.saveUserJson(jsonEncode(auth.user.toJson()));
       state = AuthAuthenticated(auth.user);
     } on DioException catch (e) {
-      if (e.response?.statusCode == 403) {
+      if (e.response?.statusCode == 402) {
+        state = const AuthError('subscription_expired');
+      } else if (e.response?.statusCode == 403) {
         state = const AuthError('email_not_verified');
       } else if (_isOfflineError(e)) {
         state = const AuthError('Sin conexión. Conéctate para iniciar sesión por primera vez.');
@@ -138,6 +142,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       await _api.post(ApiConstants.logout);
     } catch (_) {}
+    await _ref.read(cashRegisterProvider.notifier).clearOnLogout();
     await _api.clearTokens();
     await _api.clearCachedUser();
     state = const AuthUnauthenticated();
@@ -170,8 +175,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
       e.error.toString().contains('NetworkException');
 
   String _parseError(Exception e) {
-    if (e.toString().contains('401')) return 'Credenciales incorrectos';
-    if (e.toString().contains('409')) return 'El email ya está registrado';
+    // Check Dio status codes first
+    if (e is DioException) {
+      final statusCode = e.response?.statusCode;
+      if (statusCode == 401) return 'Credenciales incorrectos';
+      if (statusCode == 409) return 'El email ya está registrado';
+      if (statusCode == 404) return 'Usuario no encontrado';
+      if (statusCode == 422) return 'Datos inválidos';
+      if (statusCode == 500) return 'Error del servidor';
+    }
     if (e.toString().contains('SocketException')) return 'Sin conexión a internet';
     return 'Error inesperado. Intenta de nuevo.';
   }

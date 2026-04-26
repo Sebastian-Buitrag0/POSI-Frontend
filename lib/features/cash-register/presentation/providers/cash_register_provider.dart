@@ -116,6 +116,13 @@ class CashRegisterNotifier extends StateNotifier<CashRegisterState> {
     await _loadSales();
   }
 
+  Future<void> clearOnLogout() async {
+    await _storage.delete(key: _keyStatus);
+    await _storage.delete(key: _keyOpeningCash);
+    await _storage.delete(key: _keyOpenedAt);
+    state = const CashRegisterState(isRestoring: false);
+  }
+
   Future<void> closeRegister({double? actualCash}) async {
     // Sync to backend (best effort)
     try {
