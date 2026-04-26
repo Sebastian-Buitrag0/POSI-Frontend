@@ -6,6 +6,7 @@ import 'core/config/app_environment.dart';
 import 'core/constants/app_colors.dart';
 import 'core/constants/app_routes.dart';
 import 'core/providers/environment_provider.dart';
+import 'core/providers/global_error_provider.dart';
 import 'core/providers/sync_provider.dart';
 import 'core/providers/theme_provider.dart';
 import 'core/theme/app_theme.dart';
@@ -14,7 +15,6 @@ import 'features/auth/presentation/pages/register_page.dart';
 import 'features/auth/presentation/pages/email_verification_page.dart';
 import 'features/auth/presentation/pages/forgot_password_page.dart';
 import 'features/auth/presentation/providers/auth_provider.dart';
-import 'features/cash-register/presentation/providers/cash_register_provider.dart';
 import 'features/products/presentation/pages/product_list_page.dart';
 import 'features/products/presentation/pages/product_form_page.dart';
 import 'features/scanner/presentation/pages/scanner_screen.dart';
@@ -28,6 +28,7 @@ import 'features/gastrobar/presentation/pages/kitchen_page.dart';
 import 'features/gastrobar/presentation/pages/order_page.dart';
 import 'features/gastrobar/presentation/pages/tables_page.dart';
 import 'features/stats/presentation/pages/stats_page.dart';
+import 'features/cash-register/presentation/providers/cash_register_provider.dart';
 
 void main() {
   runApp(const ProviderScope(child: POSIApp()));
@@ -39,7 +40,7 @@ class POSIApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authProvider);
-    ref.watch(syncProvider);
+    ref.listen(syncProvider, (_, __) {}); // mantiene sync vivo sin reconstruir el widget
     final themeMode = ref.watch(themeModeProvider).valueOrNull ?? ThemeMode.light;
 
     final router = GoRouter(
@@ -57,7 +58,13 @@ class POSIApp extends ConsumerWidget {
         if (isLoading) return isSplash ? null : AppRoutes.splash;
 
         if (isSplash) {
-          return isAuthenticated ? AppRoutes.home : AppRoutes.login;
+          if (!isAuthenticated) return AppRoutes.login;
+          // Si la caja está abierta, ir directo al POS
+          final cashRegister = ref.read(cashRegisterProvider);
+          if (cashRegister.isOpen && !cashRegister.isRestoring) {
+            return AppRoutes.pos;
+          }
+          return AppRoutes.home;
         }
         if (!isAuthenticated && !isAuthRoute) return AppRoutes.login;
         if (isAuthenticated && isAuthRoute) return AppRoutes.home;
@@ -167,7 +174,36 @@ class POSIApp extends ConsumerWidget {
       darkTheme: AppTheme.dark,
       themeMode: themeMode,
       routerConfig: router,
+      builder: (context, child) {
+        return _GlobalErrorListener(child: child!);
+      },
     );
+  }
+}
+
+class _GlobalErrorListener extends ConsumerWidget {
+  const _GlobalErrorListener({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.listen<String?>(globalErrorProvider, (_, next) {
+      if (next != null && next.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(next),
+            backgroundColor: AppColors.error,
+            duration: const Duration(seconds: 6),
+            action: SnackBarAction(
+              label: 'OK',
+              textColor: Colors.white,
+              onPressed: () => ref.read(globalErrorProvider.notifier).state = null,
+            ),
+          ),
+        );
+      }
+    });
+    return child;
   }
 }
 
@@ -175,9 +211,31 @@ class _SplashScreen extends StatelessWidget {
   const _SplashScreen();
 
   @override
-  Widget build(BuildContext context) => const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFFFF7ED),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Image.asset(
+              'assets/images/logo_banner_frase.png',
+              width: 240,
+              errorBuilder: (_, _, _) => const Icon(
+                Icons.point_of_sale_rounded,
+                size: 80,
+                color: Color(0xFFF97066),
+              ),
+            ),
+            const SizedBox(height: 40),
+            const CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation(Color(0xFFF97066)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 String _formatSyncTime(DateTime dt) {
@@ -203,11 +261,14 @@ class _HomePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = (ref.watch(authProvider) as AuthAuthenticated?)?.user;
-    final sync = ref.watch(syncProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('POSI'),
+        backgroundColor: AppColors.background,
+        title: Image.asset(
+          'assets/images/logo_banner.png',
+          height: 36,
+        ),
         actions: [
           if (kIsDebugMode)
             Consumer(
@@ -237,36 +298,41 @@ class _HomePage extends ConsumerWidget {
             ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (sync.isSyncing)
-                  const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                else
-                  Icon(
-                    sync.lastSyncAt != null
-                        ? Icons.cloud_done
-                        : Icons.cloud_off,
-                    color: sync.lastSyncAt != null
-                        ? AppColors.success
-                        : AppColors.textSecondary,
-                    size: 20,
-                  ),
-                if (sync.lastSyncAt != null) ...[
-                  const SizedBox(width: 4),
-                  Text(
-                    _formatSyncTime(sync.lastSyncAt!),
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ],
+            child: Consumer(
+              builder: (_, ref, _) {
+                final sync = ref.watch(syncProvider);
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (sync.isSyncing)
+                      const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    else
+                      Icon(
+                        sync.lastSyncAt != null
+                            ? Icons.cloud_done
+                            : Icons.cloud_off,
+                        color: sync.lastSyncAt != null
+                            ? AppColors.success
+                            : AppColors.textSecondary,
+                        size: 20,
+                      ),
+                    if (sync.lastSyncAt != null) ...[
+                      const SizedBox(width: 4),
+                      Text(
+                        _formatSyncTime(sync.lastSyncAt!),
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ],
+                );
+              },
             ),
           ),
           IconButton(
@@ -295,86 +361,90 @@ class _HomePage extends ConsumerWidget {
             ),
             const SizedBox(height: 24),
             Expanded(
-              child: GridView.count(
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 1.1,
-                children: [
-                  if (user?.isWaiter != true)
-                    _MenuCard(
-                      icon: Icons.point_of_sale,
-                      label: 'Punto de Venta',
-                      color: AppColors.primary,
-                      onTap: () {
-                        final cr = ref.read(cashRegisterProvider);
-                        if (!cr.isRestoring && !cr.isOpen) {
-                          showDialog(
-                            context: context,
-                            builder: (_) => AlertDialog(
-                              title: const Text('Caja cerrada'),
-                              content: const Text('Debes abrir la caja antes de usar el punto de venta.'),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context),
-                                  child: const Text('Cancelar'),
-                                ),
-                                FilledButton(
-                                  onPressed: () {
-                                    Navigator.pop(context);
-                                    context.push(AppRoutes.cashRegister);
-                                  },
-                                  child: const Text('Ir a Caja'),
-                                ),
-                              ],
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    if (user?.isWaiter != true)
+                      _HeroCard(
+                        icon: Icons.point_of_sale_rounded,
+                        label: 'Punto de Venta',
+                        route: AppRoutes.pos,
+                        color: AppColors.primary,
+                      ),
+                    if (user?.isWaiter != true) const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _SmallCard(
+                            Icons.table_restaurant_rounded,
+                            'Mesas',
+                            AppRoutes.gastrobarTables,
+                            AppColors.warning,
+                          ),
+                        ),
+                        if (user?.isWaiter != true) ...[
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _SmallCard(
+                              Icons.account_balance_wallet_rounded,
+                              'Caja',
+                              AppRoutes.cashRegister,
+                              AppColors.info,
                             ),
-                          );
-                          return;
-                        }
-                        context.push(AppRoutes.pos);
-                      },
+                          ),
+                        ],
+                      ],
                     ),
-                  _MenuCard(
-                    icon: Icons.table_restaurant,
-                    label: 'Mesas',
-                    color: Colors.deepOrange,
-                    onTap: () => context.push(AppRoutes.gastrobarTables),
-                  ),
-                  if (user?.isWaiter != true) ...[
-                    _MenuCard(
-                      icon: Icons.inventory_2_outlined,
-                      label: 'Productos',
-                      color: AppColors.secondary,
-                      onTap: () => context.push(AppRoutes.products),
-                    ),
-                    _MenuCard(
-                      icon: Icons.receipt_long_outlined,
-                      label: 'Historial',
-                      color: AppColors.accent,
-                      onTap: () => context.push(AppRoutes.salesHistory),
-                    ),
-                    _MenuCard(
-                      icon: Icons.store_outlined,
-                      label: 'Caja',
-                      color: AppColors.info,
-                      onTap: () => context.push(AppRoutes.cashRegister),
-                    ),
+                    if (user?.isWaiter != true) ...[
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _SmallCard(
+                              Icons.inventory_2_rounded,
+                              'Inventario',
+                              AppRoutes.products,
+                              AppColors.secondary,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _SmallCard(
+                              Icons.receipt_long_rounded,
+                              'Historial',
+                              AppRoutes.salesHistory,
+                              AppColors.accent,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    if (user?.isAdmin == true) ...[
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _SmallCard(
+                              Icons.bar_chart_rounded,
+                              'Estadísticas',
+                              AppRoutes.stats,
+                              AppColors.primary,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _SmallCard(
+                              Icons.group_rounded,
+                              'Equipo',
+                              AppRoutes.userManagement,
+                              AppColors.success,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
-                  if (user?.isAdmin == true) ...[
-                    _MenuCard(
-                      icon: Icons.bar_chart_rounded,
-                      label: 'Estadísticas',
-                      color: Colors.deepPurple,
-                      onTap: () => context.push(AppRoutes.stats),
-                    ),
-                    _MenuCard(
-                      icon: Icons.group_outlined,
-                      label: 'Equipo',
-                      color: AppColors.secondary,
-                      onTap: () => context.push(AppRoutes.userManagement),
-                    ),
-                  ],
-                ],
+                ),
               ),
             ),
           ],
@@ -384,35 +454,103 @@ class _HomePage extends ConsumerWidget {
   }
 }
 
-class _MenuCard extends StatelessWidget {
-  const _MenuCard({
+class _HeroCard extends StatelessWidget {
+  const _HeroCard({
     required this.icon,
     required this.label,
+    required this.route,
     required this.color,
-    required this.onTap,
+    this.onBeforeNavigate,
   });
 
   final IconData icon;
   final String label;
+  final String route;
   final Color color;
-  final VoidCallback onTap;
+  final bool Function()? onBeforeNavigate;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: color.withValues(alpha: 0.2)),
+      ),
+      color: color.withValues(alpha: 0.08),
+      child: InkWell(
+        onTap: () {
+          if (onBeforeNavigate != null && !onBeforeNavigate!()) return;
+          context.push(route);
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, size: 28, color: Colors.white),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  label,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: color, size: 28),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SmallCard extends StatelessWidget {
+  const _SmallCard(this.icon, this.label, this.route, this.color);
+
+  final IconData icon;
+  final String label;
+  final String route;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
     return Card(
       elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      color: color.withValues(alpha: 0.1),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: color.withValues(alpha: 0.2)),
+      ),
+      color: color.withValues(alpha: 0.08),
       child: InkWell(
-        onTap: onTap,
+        onTap: () => context.push(route),
         borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 14),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 40, color: color),
-              const SizedBox(height: 12),
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, size: 24, color: Colors.white),
+              ),
+              const SizedBox(height: 10),
               Text(
                 label,
                 textAlign: TextAlign.center,
