@@ -4,13 +4,17 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../config/app_environment.dart';
 import '../constants/api_constants.dart';
 import '../providers/environment_provider.dart';
+import '../providers/global_error_provider.dart';
 
 const _kAccessToken = 'access_token';
 const _kRefreshToken = 'refresh_token';
 const _kCachedUser = 'cached_user';
 
 final apiClientProvider = Provider<ApiClient>((ref) {
-  final client = ApiClient(baseUrl: ApiConstants.baseUrl);
+  final client = ApiClient(
+    baseUrl: ApiConstants.baseUrl,
+    onGlobalError: (msg) => ref.read(globalErrorProvider.notifier).state = msg,
+  );
   ref.listen(environmentProvider, (_, next) {
     final env = next.valueOrNull;
     if (env != null) client.updateBaseUrl(env.baseUrl);
@@ -22,11 +26,13 @@ final apiClientProvider = Provider<ApiClient>((ref) {
 
 class ApiClient {
   void updateBaseUrl(String baseUrl) {
+    _baseUrl = baseUrl;
     _dio.options.baseUrl = baseUrl;
   }
 
-  ApiClient({String? baseUrl}) {
+  ApiClient({String? baseUrl, void Function(String message)? onGlobalError}) {
     _baseUrl = baseUrl ?? ApiConstants.baseUrl;
+    _onGlobalError = onGlobalError;
     _storage = const FlutterSecureStorage();
     _dio = Dio(BaseOptions(
       baseUrl: _baseUrl,
@@ -37,9 +43,10 @@ class ApiClient {
     _dio.interceptors.add(_buildAuthInterceptor());
   }
 
-  late final String _baseUrl;
+  late String _baseUrl;
   late final Dio _dio;
   late final FlutterSecureStorage _storage;
+  void Function(String message)? _onGlobalError;
 
   // ── Token helpers ──────────────────────────────────────────────────────────
 
@@ -93,6 +100,12 @@ class ApiClient {
             } catch (_) {}
           }
           await clearTokens();
+        }
+        if (error.response?.statusCode == 402) {
+          final message = error.response?.data?['message']
+                  as String? ??
+              'Has alcanzado el límite de tu plan. Actualiza tu suscripción para continuar.';
+          _onGlobalError?.call(message);
         }
         handler.next(error);
       },
