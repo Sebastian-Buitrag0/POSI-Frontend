@@ -41,13 +41,22 @@ class GastrobarLocalRepository {
         final remoteId = json['id'] as String;
         final existing = await dao.getTableByRemoteId(remoteId);
 
+        // Si el backend dice 'occupied' pero localmente no hay orden abierta,
+        // significa que el cierre no se sincronizó (ej. fue offline).
+        // En ese caso confiamos en el estado local para no revertir el cierre.
+        var backendStatus = json['status'] as String;
+        if (existing != null && backendStatus == 'occupied') {
+          final openOrder = await dao.getOpenOrderForTable(existing.id);
+          if (openOrder == null) backendStatus = 'available';
+        }
+
         final companion = MesasTableCompanion(
           id: existing != null ? Value(existing.id) : const Value.absent(),
           remoteId: Value(remoteId),
           tenantId: Value(tenantId),
           name: Value(json['name'] as String),
           capacity: Value(json['capacity'] as int),
-          status: Value(json['status'] as String),
+          status: Value(backendStatus),
           isActive: Value(json['isActive'] as bool),
           syncStatus: const Value(SyncStatus.synced),
           createdAt: json['createdAt'] != null

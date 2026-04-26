@@ -6,7 +6,6 @@ import '../../../../core/constants/api_constants.dart';
 import '../../../../core/services/api_client.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/models/auth_models.dart';
-import '../../../cash-register/presentation/providers/cash_register_provider.dart';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -45,18 +44,17 @@ class AuthEmailNotVerified extends AuthState {
 // ── Provider ───────────────────────────────────────────────────────────────
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  return AuthNotifier(ref.watch(apiClientProvider), ref);
+  return AuthNotifier(ref.watch(apiClientProvider));
 });
 
 // ── Notifier ───────────────────────────────────────────────────────────────
 
 class AuthNotifier extends StateNotifier<AuthState> {
-  AuthNotifier(this._api, this._ref) : super(const AuthInitial()) {
+  AuthNotifier(this._api) : super(const AuthInitial()) {
     _checkExistingSession();
   }
 
   final ApiClient _api;
-  final Ref _ref;
 
   Future<void> _checkExistingSession() async {
     final token = await _api.getAccessToken();
@@ -142,7 +140,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       await _api.post(ApiConstants.logout);
     } catch (_) {}
-    await _ref.read(cashRegisterProvider.notifier).clearOnLogout();
     await _api.clearTokens();
     await _api.clearCachedUser();
     state = const AuthUnauthenticated();
