@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/constants/api_constants.dart';
-import '../../../../core/services/api_client.dart';
+import '../../../../core/database/database_provider.dart';
+import '../../../../features/auth/presentation/providers/auth_provider.dart';
+import '../../data/local_stats_service.dart';
 
 // ── Models ─────────────────────────────────────────────────────────────────
 
@@ -136,8 +137,10 @@ final statsPeriodProvider = StateProvider<String>((ref) => 'week');
 
 final statsProvider =
     StateNotifierProvider.autoDispose<StatsNotifier, StatsState>((ref) {
-  final notifier = StatsNotifier(ref.watch(apiClientProvider));
+  final db = ref.watch(databaseProvider);
+  final auth = ref.watch(authProvider);
   final period = ref.watch(statsPeriodProvider);
+  final notifier = StatsNotifier(LocalStatsService(db), auth);
   notifier.load(period);
   return notifier;
 });
@@ -145,17 +148,23 @@ final statsProvider =
 // ── Notifier ───────────────────────────────────────────────────────────────
 
 class StatsNotifier extends StateNotifier<StatsState> {
-  StatsNotifier(this._api) : super(const StatsLoading());
+  StatsNotifier(this._service, this._auth) : super(const StatsLoading());
 
-  final ApiClient _api;
+  final LocalStatsService _service;
+  final AuthState _auth;
 
   Future<void> load(String period) async {
+    if (_auth is! AuthAuthenticated) {
+      state = const StatsError('No autenticado');
+      return;
+    }
     state = const StatsLoading();
     try {
-      final response =
-          await _api.get('${ApiConstants.stats}?period=$period');
-      state = StatsLoaded(
-          StatsData.fromJson(response.data as Map<String, dynamic>));
+      final data = await _service.compute(
+        (_auth).user.tenantId,
+        period,
+      );
+      state = StatsLoaded(data);
     } catch (e) {
       state = StatsError(e.toString());
     }
