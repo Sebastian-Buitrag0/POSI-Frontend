@@ -15,7 +15,24 @@ class StatsPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Estadísticas'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Estadísticas'),
+            Text(
+              switch (period) {
+                'today' => 'Hoy',
+                'week' => 'Últimos 7 días',
+                'month' => 'Este mes',
+                _ => period,
+              },
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(48),
           child: _PeriodSelector(selected: period),
@@ -24,55 +41,80 @@ class StatsPage extends ConsumerWidget {
       body: switch (state) {
         StatsLoading() => const Center(child: CircularProgressIndicator()),
         StatsError(:final message) => Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.error_outline,
-                    color: AppColors.error, size: 48),
-                const SizedBox(height: 8),
-                Text(message, textAlign: TextAlign.center),
-                const SizedBox(height: 12),
-                TextButton(
-                  onPressed: () =>
-                      ref.read(statsProvider.notifier).load(period),
-                  child: const Text('Reintentar'),
-                ),
-              ],
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.error_outline, color: AppColors.error, size: 48),
+                  const SizedBox(height: 8),
+                  const Text('No se pudieron cargar las estadísticas',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                      textAlign: TextAlign.center),
+                  const SizedBox(height: 4),
+                  Text(message,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: () => ref.read(statsProvider.notifier).load(period),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Reintentar'),
+                  ),
+                ],
+              ),
             ),
           ),
         StatsLoaded(:final data) => RefreshIndicator(
-            onRefresh: () =>
-                ref.read(statsProvider.notifier).load(period),
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                _KpiRow(data: data),
-                const SizedBox(height: 20),
-                _SectionTitle('Ventas últimos 7 días'),
-                const SizedBox(height: 12),
-                _SalesBarChart(days: data.salesByDay),
-                const SizedBox(height: 20),
-                if (data.salesByPaymentMethod.isNotEmpty) ...[
-                  _SectionTitle('Métodos de pago'),
-                  const SizedBox(height: 12),
-                  _PaymentPieChart(methods: data.salesByPaymentMethod),
-                  const SizedBox(height: 20),
-                ],
-                if (data.topProducts.isNotEmpty) ...[
-                  _SectionTitle('Productos más vendidos'),
-                  const SizedBox(height: 8),
-                  _TopProductsList(products: data.topProducts),
-                  const SizedBox(height: 20),
-                ],
-                if (data.lowStockProducts.isNotEmpty) ...[
-                  _SectionTitle('Stock bajo',
-                      color: AppColors.error),
-                  const SizedBox(height: 8),
-                  _LowStockList(products: data.lowStockProducts),
-                  const SizedBox(height: 16),
-                ],
-              ],
-            ),
+            onRefresh: () => ref.read(statsProvider.notifier).load(period),
+            child: data.totalSales == 0
+                ? ListView(
+                    padding: const EdgeInsets.all(24),
+                    children: [
+                      const SizedBox(height: 48),
+                      const Icon(Icons.bar_chart_rounded,
+                          size: 72, color: AppColors.textSecondary),
+                      const SizedBox(height: 16),
+                      const Text('Sin ventas en este período',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 8),
+                      const Text(
+                          'Registra ventas desde el Punto de Venta\npara ver tus estadísticas aquí.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: AppColors.textSecondary)),
+                    ],
+                  )
+                : ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      _KpiRow(data: data),
+                      const SizedBox(height: 20),
+                      _SectionTitle('Ventas últimos 7 días'),
+                      const SizedBox(height: 12),
+                      _SalesBarChart(days: data.salesByDay),
+                      const SizedBox(height: 20),
+                      if (data.salesByPaymentMethod.isNotEmpty) ...[
+                        _SectionTitle('Métodos de pago'),
+                        const SizedBox(height: 12),
+                        _PaymentPieChart(methods: data.salesByPaymentMethod),
+                        const SizedBox(height: 20),
+                      ],
+                      if (data.topProducts.isNotEmpty) ...[
+                        _SectionTitle('Productos más vendidos'),
+                        const SizedBox(height: 8),
+                        _TopProductsList(products: data.topProducts),
+                        const SizedBox(height: 20),
+                      ],
+                      if (data.lowStockProducts.isNotEmpty) ...[
+                        _SectionTitle('Stock bajo', color: AppColors.error),
+                        const SizedBox(height: 8),
+                        _LowStockList(products: data.lowStockProducts),
+                        const SizedBox(height: 16),
+                      ],
+                    ],
+                  ),
           ),
       },
     );
@@ -169,9 +211,9 @@ class _KpiCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withAlpha(15),
+        color: color.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withAlpha(40)),
+        border: Border.all(color: color.withValues(alpha: 0.16)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -233,7 +275,7 @@ class _SalesBarChart extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.withAlpha(30)),
+        border: Border.all(color: AppColors.border),
       ),
       child: BarChart(
         BarChartData(
@@ -243,7 +285,7 @@ class _SalesBarChart extends StatelessWidget {
             drawVerticalLine: false,
             horizontalInterval: maxRevenue == 0 ? 50 : maxRevenue * 0.4,
             getDrawingHorizontalLine: (v) => FlLine(
-              color: Colors.grey.withAlpha(30),
+              color: AppColors.border,
               strokeWidth: 1,
             ),
           ),
@@ -341,7 +383,7 @@ class _PaymentPieChartState extends State<_PaymentPieChart> {
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.withAlpha(30)),
+        border: Border.all(color: AppColors.border),
       ),
       child: Row(
         children: [
@@ -442,7 +484,7 @@ class _TopProductsList extends StatelessWidget {
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.withAlpha(30)),
+        border: Border.all(color: AppColors.border),
       ),
       child: Column(
         children: products.asMap().entries.map((e) {
@@ -458,7 +500,7 @@ class _TopProductsList extends StatelessWidget {
                       width: 22,
                       height: 22,
                       decoration: BoxDecoration(
-                        color: AppColors.primary.withAlpha(20),
+                        color: AppColors.primary.withValues(alpha: 0.08),
                         shape: BoxShape.circle,
                       ),
                       child: Center(
@@ -493,7 +535,7 @@ class _TopProductsList extends StatelessWidget {
                   child: LinearProgressIndicator(
                     value: pct,
                     minHeight: 4,
-                    backgroundColor: AppColors.primary.withAlpha(20),
+                    backgroundColor: AppColors.primary.withValues(alpha: 0.08),
                     valueColor: const AlwaysStoppedAnimation(AppColors.primary),
                   ),
                 ),
@@ -520,7 +562,7 @@ class _LowStockList extends StatelessWidget {
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.error.withAlpha(60)),
+        border: Border.all(color: AppColors.error.withValues(alpha: 0.24)),
       ),
       child: Column(
         children: products.asMap().entries.map((e) {
@@ -532,14 +574,14 @@ class _LowStockList extends StatelessWidget {
                 dense: true,
                 leading: CircleAvatar(
                   radius: 16,
-                  backgroundColor: (isOut ? AppColors.error : Colors.orange)
-                      .withAlpha(20),
+                  backgroundColor: (isOut ? AppColors.error : AppColors.warning)
+                      .withValues(alpha: 0.08),
                   child: Text(
                     '${p.stock}',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      color: isOut ? AppColors.error : Colors.orange,
+                      color: isOut ? AppColors.error : AppColors.warning,
                     ),
                   ),
                 ),
@@ -550,15 +592,15 @@ class _LowStockList extends StatelessWidget {
                   isOut ? 'Sin stock' : 'Mínimo: ${p.minStock}',
                   style: TextStyle(
                     fontSize: 11,
-                    color: isOut ? AppColors.error : Colors.orange,
+                    color: isOut ? AppColors.error : AppColors.warning,
                   ),
                 ),
                 trailing: isOut
-                    ? const Chip(
-                        label: Text('AGOTADO',
+                    ? Chip(
+                        label: const Text('AGOTADO',
                             style: TextStyle(
                                 fontSize: 10, color: AppColors.error)),
-                        backgroundColor: Color(0x1FEF4444),
+                        backgroundColor: AppColors.error.withValues(alpha: 0.12),
                         side: BorderSide.none,
                         padding: EdgeInsets.zero,
                       )
