@@ -419,7 +419,7 @@ class _HomePage extends ConsumerWidget {
                         ],
                       ),
                     ],
-                    if (user?.isAdmin == true) ...[
+                    if (user?.isAdmin == true || user?.isManager == true) ...[
                       const SizedBox(height: 10),
                       Row(
                         children: [

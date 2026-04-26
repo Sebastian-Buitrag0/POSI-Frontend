@@ -156,7 +156,7 @@ class StatsNotifier extends StateNotifier<StatsState> {
           await _api.get('${ApiConstants.stats}?period=$period');
       state = StatsLoaded(
           StatsData.fromJson(response.data as Map<String, dynamic>));
-    } on Exception catch (e) {
+    } catch (e) {
       state = StatsError(e.toString());
     }
   }
